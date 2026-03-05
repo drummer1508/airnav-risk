@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import type { Risk, OrgUnit, TaxonomyT1, TaxonomyT2, TaxonomyT3, WorkflowLog, Mitigation } from "@shared/schema";
 import { getRiskLevelInfo, getStatusInfo, getMitigationStatusInfo, getStrategyInfo, IMPACT_CRITERIA_LABELS, IMPACT_DESCRIPTIONS, LIKELIHOOD_DESCRIPTIONS, formatCurrency } from "@/lib/risk-helpers";
+import { useAuth } from "@/lib/auth";
 import { Plus, Search, AlertTriangle, Pencil, Trash2, Filter, Eye, History, ChevronRight } from "lucide-react";
 
 function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }: {
@@ -372,6 +373,7 @@ export default function RisksPage() {
   const [detailRisk, setDetailRisk] = useState<Risk | null>(null);
   const [editingRisk, setEditingRisk] = useState<Risk | undefined>();
   const { toast } = useToast();
+  const { canCreateRisk, isSysadmin } = useAuth();
 
   const { data: allRisks = [], isLoading } = useQuery<Risk[]>({ queryKey: ["/api/risks"] });
   const { data: orgUnits = [] } = useQuery<OrgUnit[]>({ queryKey: ["/api/org-units"] });
@@ -414,9 +416,11 @@ export default function RisksPage() {
           <p className="text-muted-foreground mt-1">Identifikasi, penilaian, dan pengelolaan risiko enterprise</p>
         </div>
         <Dialog open={formOpen} onOpenChange={(open) => { setFormOpen(open); if (!open) setEditingRisk(undefined); }}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-risk"><Plus className="h-4 w-4 mr-2" />Tambah Risiko</Button>
-          </DialogTrigger>
+          {canCreateRisk && (
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-risk"><Plus className="h-4 w-4 mr-2" />Tambah Risiko</Button>
+            </DialogTrigger>
+          )}
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{editingRisk ? "Edit Risiko" : "Input Risiko Baru"}</DialogTitle></DialogHeader>
             <RiskForm
@@ -489,7 +493,7 @@ export default function RisksPage() {
                       <div className="flex items-center gap-1">
                         <Button size="icon" variant="ghost" onClick={() => setDetailRisk(risk)} data-testid={`button-view-risk-${risk.id}`}><Eye className="h-4 w-4" /></Button>
                         <Button size="icon" variant="ghost" onClick={() => { setEditingRisk(risk); setFormOpen(true); }} data-testid={`button-edit-risk-${risk.id}`}><Pencil className="h-4 w-4" /></Button>
-                        <Button size="icon" variant="ghost" onClick={() => deleteMut.mutate(risk.id)} data-testid={`button-delete-risk-${risk.id}`}><Trash2 className="h-4 w-4" /></Button>
+                        {canCreateRisk && <Button size="icon" variant="ghost" onClick={() => deleteMut.mutate(risk.id)} data-testid={`button-delete-risk-${risk.id}`}><Trash2 className="h-4 w-4" /></Button>}
                       </div>
                     </TableCell>
                   </TableRow>

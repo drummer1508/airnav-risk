@@ -15,7 +15,19 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: number, user: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: number): Promise<boolean>;
   getUsers(): Promise<User[]>;
+
+  createTaxonomyT1(data: { name: string }): Promise<TaxonomyT1>;
+  updateTaxonomyT1(id: number, data: { name: string }): Promise<TaxonomyT1 | undefined>;
+  deleteTaxonomyT1(id: number): Promise<boolean>;
+  createTaxonomyT2(data: { name: string; t1Id: number }): Promise<TaxonomyT2>;
+  updateTaxonomyT2(id: number, data: { name: string; t1Id?: number }): Promise<TaxonomyT2 | undefined>;
+  deleteTaxonomyT2(id: number): Promise<boolean>;
+  createTaxonomyT3(data: { name: string; t2Id: number }): Promise<TaxonomyT3>;
+  updateTaxonomyT3(id: number, data: { name: string; t2Id?: number }): Promise<TaxonomyT3 | undefined>;
+  deleteTaxonomyT3(id: number): Promise<boolean>;
 
   getOrgUnits(): Promise<OrgUnit[]>;
   createOrgUnit(unit: InsertOrgUnit): Promise<OrgUnit>;
@@ -55,8 +67,55 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.insert(users).values(u).returning();
     return result;
   }
+  async updateUser(id: number, user: Partial<InsertUser>): Promise<User | undefined> {
+    const [result] = await db.update(users).set(user).where(eq(users.id, id)).returning();
+    return result;
+  }
+  async deleteUser(id: number): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
   async getUsers(): Promise<User[]> {
     return db.select().from(users);
+  }
+
+  async createTaxonomyT1(data: { name: string }): Promise<TaxonomyT1> {
+    const [result] = await db.insert(taxonomyT1).values(data).returning();
+    return result;
+  }
+  async updateTaxonomyT1(id: number, data: { name: string }): Promise<TaxonomyT1 | undefined> {
+    const [result] = await db.update(taxonomyT1).set(data).where(eq(taxonomyT1.id, id)).returning();
+    return result;
+  }
+  async deleteTaxonomyT1(id: number): Promise<boolean> {
+    await db.delete(taxonomyT2).where(eq(taxonomyT2.t1Id, id));
+    const result = await db.delete(taxonomyT1).where(eq(taxonomyT1.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+  async createTaxonomyT2(data: { name: string; t1Id: number }): Promise<TaxonomyT2> {
+    const [result] = await db.insert(taxonomyT2).values(data).returning();
+    return result;
+  }
+  async updateTaxonomyT2(id: number, data: { name: string; t1Id?: number }): Promise<TaxonomyT2 | undefined> {
+    const [result] = await db.update(taxonomyT2).set(data).where(eq(taxonomyT2.id, id)).returning();
+    return result;
+  }
+  async deleteTaxonomyT2(id: number): Promise<boolean> {
+    await db.delete(taxonomyT3).where(eq(taxonomyT3.t2Id, id));
+    const result = await db.delete(taxonomyT2).where(eq(taxonomyT2.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+  async createTaxonomyT3(data: { name: string; t2Id: number }): Promise<TaxonomyT3> {
+    const [result] = await db.insert(taxonomyT3).values(data).returning();
+    return result;
+  }
+  async updateTaxonomyT3(id: number, data: { name: string; t2Id?: number }): Promise<TaxonomyT3 | undefined> {
+    const [result] = await db.update(taxonomyT3).set(data).where(eq(taxonomyT3.id, id)).returning();
+    return result;
+  }
+  async deleteTaxonomyT3(id: number): Promise<boolean> {
+    const result = await db.delete(taxonomyT3).where(eq(taxonomyT3.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getOrgUnits(): Promise<OrgUnit[]> {

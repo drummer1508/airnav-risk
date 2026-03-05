@@ -24,18 +24,30 @@ A comprehensive Enterprise Risk Management (ERM) system for AirNav Indonesia, bu
 - `mitigations`: riskId, strategy, actionDescription, picName, deadline, estimatedCost, progress, status
 - `workflow_logs`: riskId, fromStatus, toStatus, actorName, actorRole, comments
 
+## Authentication & RBAC
+- Session-based auth with express-session + connect-pg-simple
+- Default users: sysadmin/admin123, inputer1/inputer123, reviewer1/reviewer123, approval1/approval123
+- Roles: sysadmin (full access), inputer (create/edit/delete risks+mitigations), reviewer (review workflow, edit risks), approval (approve workflow, edit risks)
+- Frontend uses AuthProvider context (client/src/lib/auth.tsx) with useAuth hook providing role flags (canCreateRisk, canReviewRisk, canApproveRisk, canManageMaster)
+- UI buttons conditionally shown/hidden based on role; backend enforces role checks on all mutating endpoints
+- Admin Panel (Users, Taxonomy CRUD) visible only to sysadmin
+
 ## File Structure
 - `shared/schema.ts` - Drizzle schema and Zod validation
 - `server/db.ts` - Database connection
 - `server/storage.ts` - Storage interface (DatabaseStorage) with Max Impact computation
-- `server/routes.ts` - API endpoints
-- `server/seed.ts` - Realistic AirNav Indonesia seed data
+- `server/routes.ts` - API endpoints with role-based middleware
+- `server/auth.ts` - Session setup, password hashing, requireAuth/requireRole middleware
+- `server/seed.ts` - Realistic AirNav Indonesia seed data with default users
+- `client/src/pages/login.tsx` - Login page
 - `client/src/pages/dashboard.tsx` - Dashboard with heatmap and analytics
-- `client/src/pages/risks.tsx` - Risk register with multi-tab form
-- `client/src/pages/mitigations.tsx` - Mitigation tracking
+- `client/src/pages/risks.tsx` - Risk register with multi-tab form (RBAC-gated actions)
+- `client/src/pages/mitigations.tsx` - Mitigation tracking (RBAC-gated actions)
 - `client/src/pages/org-units.tsx` - Organizational hierarchy
-- `client/src/pages/taxonomy.tsx` - 3-level taxonomy viewer
-- `client/src/components/app-sidebar.tsx` - Navigation sidebar
+- `client/src/pages/taxonomy.tsx` - 3-level taxonomy CRUD (sysadmin only)
+- `client/src/pages/users.tsx` - User management (sysadmin only)
+- `client/src/lib/auth.tsx` - AuthProvider context and useAuth hook
+- `client/src/components/app-sidebar.tsx` - Navigation sidebar with role-based menu
 - `client/src/components/theme-provider.tsx` - Dark mode provider
 - `client/src/lib/risk-helpers.ts` - Risk scoring utilities, labels, colors
 

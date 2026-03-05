@@ -5,9 +5,11 @@ import {
   FolderTree,
   Settings,
   Building2,
-  FileText,
+  Users,
+  LogOut,
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
+import { useAuth } from "@/lib/auth";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +22,8 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 const mainNav = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -30,10 +34,19 @@ const mainNav = [
 const adminNav = [
   { title: "Organisasi", url: "/org-units", icon: Building2 },
   { title: "Taxonomy", url: "/taxonomy", icon: FolderTree },
+  { title: "Users", url: "/users", icon: Users },
 ];
+
+const ROLE_LABELS: Record<string, string> = {
+  sysadmin: "Sysadmin",
+  inputer: "Inputer",
+  reviewer: "Reviewer",
+  approval: "Approval",
+};
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user, logout, isSysadmin } = useAuth();
 
   const isActive = (url: string) =>
     url === "/" ? location === "/" : location.startsWith(url);
@@ -79,30 +92,45 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Admin Panel</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {adminNav.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    data-active={isActive(item.url)}
-                    className="data-[active=true]:bg-sidebar-accent"
-                  >
-                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {isSysadmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Admin Panel</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminNav.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive(item.url)}
+                      className="data-[active=true]:bg-sidebar-accent"
+                    >
+                      <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
-      <SidebarFooter className="p-4">
+      <SidebarFooter className="p-4 space-y-3">
+        {user && (
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-medium truncate" data-testid="text-user-name">{user.fullName}</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Badge variant="outline" className="text-[10px]" data-testid="text-user-role">{ROLE_LABELS[user.role] || user.role}</Badge>
+              </div>
+            </div>
+            <Button size="icon" variant="ghost" onClick={() => logout()} data-testid="button-logout">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Settings className="h-3 w-3" />
           <span>AirNav Indonesia - ERM v2.0</span>

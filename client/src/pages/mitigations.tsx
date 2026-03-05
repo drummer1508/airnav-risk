@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import type { Mitigation, Risk } from "@shared/schema";
 import { getMitigationStatusInfo, getStrategyInfo, formatCurrency } from "@/lib/risk-helpers";
+import { useAuth } from "@/lib/auth";
 import { Plus, Search, Shield, Pencil, Trash2, Filter, Calendar } from "lucide-react";
 
 function MitigationForm({ mitigation, risks, onSave, onCancel, isPending }: {
@@ -118,6 +119,7 @@ export default function MitigationsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Mitigation | undefined>();
   const { toast } = useToast();
+  const { canCreateRisk } = useAuth();
 
   const { data: allMitigations = [], isLoading } = useQuery<Mitigation[]>({ queryKey: ["/api/mitigations"] });
   const { data: risks = [] } = useQuery<Risk[]>({ queryKey: ["/api/risks"] });
@@ -156,9 +158,11 @@ export default function MitigationsPage() {
           <p className="text-muted-foreground mt-1">Kelola tindakan mitigasi risiko dan monitoring progress</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditing(undefined); }}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-mitigation"><Plus className="h-4 w-4 mr-2" />Tambah Mitigasi</Button>
-          </DialogTrigger>
+          {canCreateRisk && (
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-mitigation"><Plus className="h-4 w-4 mr-2" />Tambah Mitigasi</Button>
+            </DialogTrigger>
+          )}
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{editing ? "Edit Mitigasi" : "Input Mitigasi Baru"}</DialogTitle></DialogHeader>
             <MitigationForm
@@ -238,8 +242,8 @@ export default function MitigationsPage() {
                     <TableCell className="text-xs text-muted-foreground">{formatCurrency(mit.estimatedCost)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Button size="icon" variant="ghost" onClick={() => { setEditing(mit); setDialogOpen(true); }} data-testid={`button-edit-mitigation-${mit.id}`}><Pencil className="h-4 w-4" /></Button>
-                        <Button size="icon" variant="ghost" onClick={() => deleteMut.mutate(mit.id)} data-testid={`button-delete-mitigation-${mit.id}`}><Trash2 className="h-4 w-4" /></Button>
+                        {canCreateRisk && <Button size="icon" variant="ghost" onClick={() => { setEditing(mit); setDialogOpen(true); }} data-testid={`button-edit-mitigation-${mit.id}`}><Pencil className="h-4 w-4" /></Button>}
+                        {canCreateRisk && <Button size="icon" variant="ghost" onClick={() => deleteMut.mutate(mit.id)} data-testid={`button-delete-mitigation-${mit.id}`}><Trash2 className="h-4 w-4" /></Button>}
                       </div>
                     </TableCell>
                   </TableRow>

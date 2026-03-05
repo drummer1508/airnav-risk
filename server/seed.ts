@@ -1,7 +1,19 @@
 import { db } from "./db";
-import { orgUnits, taxonomyT1, taxonomyT2, taxonomyT3, risks, mitigations, workflowLogs } from "@shared/schema";
+import { users, orgUnits, taxonomyT1, taxonomyT2, taxonomyT3, risks, mitigations, workflowLogs } from "@shared/schema";
+import bcrypt from "bcrypt";
 
 export async function seedDatabase() {
+  const existingUsers = await db.select().from(users);
+  if (existingUsers.length === 0) {
+    const hash = await bcrypt.hash("admin123", 10);
+    await db.insert(users).values([
+      { username: "sysadmin", password: hash, fullName: "System Administrator", role: "sysadmin", line: 0, isActive: true },
+      { username: "inputer1", password: await bcrypt.hash("inputer123", 10), fullName: "Budi Santoso", role: "inputer", line: 1, isActive: true },
+      { username: "reviewer1", password: await bcrypt.hash("reviewer123", 10), fullName: "Ahmad Fauzi", role: "reviewer", line: 1, isActive: true },
+      { username: "approval1", password: await bcrypt.hash("approval123", 10), fullName: "Direktur Operasi", role: "approval", line: 1, isActive: true },
+    ]);
+  }
+
   const existingT1 = await db.select().from(taxonomyT1);
   if (existingT1.length > 0) return;
 
