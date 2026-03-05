@@ -5,137 +5,94 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertTriangle,
   ShieldCheck,
-  TrendingUp,
   Activity,
   AlertOctagon,
   ChevronUp,
   Minus,
   ChevronDown,
+  FileText,
+  CheckCircle,
+  Clock,
+  TrendingUp,
 } from "lucide-react";
+import { getRiskLevelInfo, getStatusInfo, getHeatMapColor } from "@/lib/risk-helpers";
+import type { OrgUnit } from "@shared/schema";
 
 interface DashboardStats {
   totalRisks: number;
-  openRisks: number;
-  mitigatedRisks: number;
-  closedRisks: number;
+  draftRisks: number;
+  reviewedRisks: number;
+  approvedRisks: number;
+  validatedRisks: number;
   criticalRisks: number;
   highRisks: number;
   mediumRisks: number;
   lowRisks: number;
   activeMitigations: number;
   completedMitigations: number;
+  plannedMitigations: number;
   totalMitigations: number;
-  risksByCategory: { name: string; color: string; count: number }[];
-  heatMapData: { likelihood: number; impact: number; title: string; id: number }[];
+  risksByT1: { name: string; count: number }[];
+  risksByOrgUnit: { name: string; type: string; count: number }[];
+  heatMapData: { likelihood: number; impact: number; title: string; id: number; riskCode: string; currentStatus: string }[];
+  topRisks: { id: number; riskCode: string; title: string; inherentRiskScore: number; impactScore: number; likelihoodScore: number; currentStatus: string; riskOwner: string | null; orgUnitId: number | null }[];
 }
 
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  description,
-  variant = "default",
-}: {
-  title: string;
-  value: string | number;
-  icon: any;
-  description: string;
-  variant?: "default" | "destructive" | "warning" | "success";
+function StatCard({ title, value, icon: Icon, description, iconColor }: {
+  title: string; value: string | number; icon: any; description: string; iconColor: string;
 }) {
-  const variantClasses = {
-    default: "text-primary",
-    destructive: "text-red-500 dark:text-red-400",
-    warning: "text-amber-500 dark:text-amber-400",
-    success: "text-emerald-500 dark:text-emerald-400",
-  };
-
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {title}
-        </CardTitle>
-        <Icon className={`h-4 w-4 ${variantClasses[variant]}`} />
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <Icon className={`h-4 w-4 ${iconColor}`} />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold" data-testid={`stat-${title.toLowerCase().replace(/\s+/g, "-")}`}>
-          {value}
-        </div>
+        <div className="text-2xl font-bold" data-testid={`stat-${title.toLowerCase().replace(/\s+/g, "-")}`}>{value}</div>
         <p className="text-xs text-muted-foreground mt-1">{description}</p>
       </CardContent>
     </Card>
   );
 }
 
-function RiskLevelBadge({ level, count }: { level: string; count: number }) {
-  const config: Record<string, { className: string; icon: any }> = {
-    Critical: { className: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20", icon: AlertOctagon },
-    High: { className: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20", icon: ChevronUp },
-    Medium: { className: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20", icon: Minus },
-    Low: { className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20", icon: ChevronDown },
-  };
-
-  const c = config[level];
-  const Icon = c.icon;
-
-  return (
-    <div className="flex items-center justify-between py-3" data-testid={`risk-level-${level.toLowerCase()}`}>
-      <div className="flex items-center gap-3">
-        <div className={`flex h-8 w-8 items-center justify-center rounded-md ${c.className}`}>
-          <Icon className="h-4 w-4" />
-        </div>
-        <span className="text-sm font-medium">{level}</span>
-      </div>
-      <span className="text-lg font-semibold">{count}</span>
-    </div>
-  );
-}
-
 function HeatMap({ data }: { data: DashboardStats["heatMapData"] }) {
-  const grid: { [key: string]: number } = {};
+  const grid: Record<string, { count: number; items: typeof data }> = {};
   data.forEach((d) => {
     const key = `${d.likelihood}-${d.impact}`;
-    grid[key] = (grid[key] || 0) + 1;
+    if (!grid[key]) grid[key] = { count: 0, items: [] };
+    grid[key].count++;
+    grid[key].items.push(d);
   });
 
-  const getCellColor = (l: number, i: number) => {
-    const score = l * i;
-    if (score >= 16) return "bg-red-500/80 dark:bg-red-500/60";
-    if (score >= 9) return "bg-orange-500/70 dark:bg-orange-500/50";
-    if (score >= 4) return "bg-amber-500/60 dark:bg-amber-500/40";
-    return "bg-emerald-500/50 dark:bg-emerald-500/30";
-  };
+  const impactLabels = ["Sangat Rendah", "Rendah", "Moderat", "Tinggi", "Sangat Tinggi"];
+  const likelihoodLabels = ["Sangat Jarang", "Jarang", "Mungkin", "Sering", "Hampir Pasti"];
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <div className="flex items-end gap-1">
-        <div className="w-16 text-xs text-muted-foreground text-right pr-2 pb-1">
-          Impact
-        </div>
+        <div className="w-20 shrink-0" />
         <div className="flex-1 grid grid-cols-5 gap-1">
-          {[1, 2, 3, 4, 5].map((l) => (
-            <div key={l} className="text-xs text-center text-muted-foreground pb-1">
-              {l}
-            </div>
+          {likelihoodLabels.map((l, i) => (
+            <div key={i} className="text-[10px] text-center text-muted-foreground leading-tight pb-1">{l}</div>
           ))}
         </div>
       </div>
       {[5, 4, 3, 2, 1].map((impact) => (
         <div key={impact} className="flex items-center gap-1">
-          <div className="w-16 text-xs text-muted-foreground text-right pr-2">
-            {impact}
+          <div className="w-20 shrink-0 text-[10px] text-muted-foreground text-right pr-2 leading-tight">
+            {impactLabels[impact - 1]}
           </div>
           <div className="flex-1 grid grid-cols-5 gap-1">
             {[1, 2, 3, 4, 5].map((likelihood) => {
-              const count = grid[`${likelihood}-${impact}`] || 0;
+              const cell = grid[`${likelihood}-${impact}`];
+              const count = cell?.count || 0;
               return (
                 <div
                   key={likelihood}
-                  className={`aspect-square rounded-md flex items-center justify-center text-xs font-medium ${
-                    count > 0
-                      ? `${getCellColor(likelihood, impact)} text-white`
-                      : "bg-muted/50"
+                  className={`aspect-square rounded-md flex items-center justify-center text-xs font-bold transition-all ${
+                    count > 0 ? `${getHeatMapColor(likelihood, impact)} text-white` : "bg-muted/40"
                   }`}
+                  title={cell?.items.map(i => `${i.riskCode}: ${i.title}`).join("\n")}
                   data-testid={`heatmap-cell-${likelihood}-${impact}`}
                 >
                   {count > 0 ? count : ""}
@@ -146,147 +103,208 @@ function HeatMap({ data }: { data: DashboardStats["heatMapData"] }) {
         </div>
       ))}
       <div className="flex items-center gap-1 pt-1">
-        <div className="w-16" />
-        <div className="flex-1 text-xs text-center text-muted-foreground">
-          Likelihood
-        </div>
+        <div className="w-20 shrink-0 text-[10px] text-muted-foreground text-right pr-2">Dampak / Probabilitas</div>
+        <div className="flex-1 text-[10px] text-center text-muted-foreground">Probabilitas (Likelihood)</div>
+      </div>
+      <div className="flex items-center justify-center gap-4 mt-3 flex-wrap">
+        <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-emerald-400" /><span className="text-xs text-muted-foreground">Rendah (1-3)</span></div>
+        <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-amber-400" /><span className="text-xs text-muted-foreground">Sedang (4-8)</span></div>
+        <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-orange-500" /><span className="text-xs text-muted-foreground">Tinggi (9-15)</span></div>
+        <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded-sm bg-red-500" /><span className="text-xs text-muted-foreground">Sangat Tinggi (16-25)</span></div>
       </div>
     </div>
   );
 }
 
-export default function Dashboard() {
-  const { data: stats, isLoading } = useQuery<DashboardStats>({
-    queryKey: ["/api/dashboard/stats"],
-  });
+function RiskLevelRow({ level, count, icon: Icon, className }: { level: string; count: number; icon: any; className: string }) {
+  return (
+    <div className="flex items-center justify-between py-2.5">
+      <div className="flex items-center gap-3">
+        <div className={`flex h-8 w-8 items-center justify-center rounded-md ${className}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <span className="text-sm font-medium">{level}</span>
+      </div>
+      <span className="text-lg font-semibold">{count}</span>
+    </div>
+  );
+}
 
-  if (isLoading) {
+export default function Dashboard() {
+  const { data: stats, isLoading } = useQuery<DashboardStats>({ queryKey: ["/api/dashboard/stats"] });
+  const { data: orgUnitsList = [] } = useQuery<OrgUnit[]>({ queryKey: ["/api/org-units"] });
+
+  const getOrgName = (id: number | null) => {
+    if (!id) return "-";
+    const unit = orgUnitsList.find(u => u.id === id);
+    return unit ? unit.name.replace("Direktorat ", "").replace("Cabang ", "") : "-";
+  };
+
+  if (isLoading || !stats) {
     return (
       <div className="p-6 space-y-6">
-        <div>
-          <Skeleton className="h-8 w-64 mb-2" />
-          <Skeleton className="h-4 w-96" />
-        </div>
+        <Skeleton className="h-8 w-64 mb-2" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-28" />
-          ))}
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Skeleton className="h-80" />
-          <Skeleton className="h-80" />
+          <Skeleton className="h-80" /><Skeleton className="h-80" />
         </div>
       </div>
     );
   }
 
-  if (!stats) return null;
-
   return (
     <div className="p-6 space-y-6 overflow-auto h-full">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">
-          Risk Dashboard
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Overview of enterprise risk management metrics and indicators
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Executive Dashboard</h1>
+        <p className="text-muted-foreground mt-1">Ringkasan Enterprise Risk Management AirNav Indonesia</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Risks"
-          value={stats.totalRisks}
-          icon={AlertTriangle}
-          description={`${stats.openRisks} open, ${stats.closedRisks} closed`}
-        />
-        <StatCard
-          title="Critical Risks"
-          value={stats.criticalRisks}
-          icon={AlertOctagon}
-          description="Score 16-25, requires immediate attention"
-          variant="destructive"
-        />
-        <StatCard
-          title="Active Mitigations"
-          value={stats.activeMitigations}
-          icon={Activity}
-          description={`${stats.completedMitigations} of ${stats.totalMitigations} completed`}
-          variant="warning"
-        />
-        <StatCard
-          title="Mitigated Risks"
-          value={stats.mitigatedRisks}
-          icon={ShieldCheck}
-          description="Successfully mitigated risks"
-          variant="success"
-        />
+        <StatCard title="Total Risiko" value={stats.totalRisks} icon={AlertTriangle} description={`${stats.criticalRisks} sangat tinggi, ${stats.highRisks} tinggi`} iconColor="text-primary" />
+        <StatCard title="Risiko Sangat Tinggi" value={stats.criticalRisks} icon={AlertOctagon} description="Skor 16-25, perlu tindakan segera" iconColor="text-red-500 dark:text-red-400" />
+        <StatCard title="Mitigasi Aktif" value={stats.activeMitigations} icon={Activity} description={`${stats.completedMitigations} selesai dari ${stats.totalMitigations}`} iconColor="text-amber-500 dark:text-amber-400" />
+        <StatCard title="Tervalidasi" value={stats.validatedRisks} icon={ShieldCheck} description="Risiko telah divalidasi Lini 2" iconColor="text-emerald-500 dark:text-emerald-400" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" />Risk Heat Map (Inherent)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <HeatMap data={stats.heatMapData} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-primary" />Risk Level Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <RiskLevelRow level="Sangat Tinggi" count={stats.criticalRisks} icon={AlertOctagon} className="bg-red-500/10 text-red-600 dark:text-red-400" />
+            <RiskLevelRow level="Tinggi" count={stats.highRisks} icon={ChevronUp} className="bg-orange-500/10 text-orange-600 dark:text-orange-400" />
+            <RiskLevelRow level="Sedang" count={stats.mediumRisks} icon={Minus} className="bg-amber-500/10 text-amber-600 dark:text-amber-400" />
+            <RiskLevelRow level="Rendah" count={stats.lowRisks} icon={ChevronDown} className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" />
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-primary" />
-              Risk Heat Map
+              <AlertOctagon className="h-4 w-4 text-red-500" />Top 10 High Risks
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <HeatMap data={stats.heatMapData} />
-            <div className="flex items-center justify-center gap-4 mt-4 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <div className="h-3 w-3 rounded-sm bg-emerald-500/50" />
-                <span className="text-xs text-muted-foreground">Low (1-3)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="h-3 w-3 rounded-sm bg-amber-500/60" />
-                <span className="text-xs text-muted-foreground">Medium (4-8)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="h-3 w-3 rounded-sm bg-orange-500/70" />
-                <span className="text-xs text-muted-foreground">High (9-15)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="h-3 w-3 rounded-sm bg-red-500/80" />
-                <span className="text-xs text-muted-foreground">Critical (16-25)</span>
-              </div>
-            </div>
+          <CardContent className="space-y-2 max-h-80 overflow-auto">
+            {stats.topRisks.map((risk, idx) => {
+              const level = getRiskLevelInfo(risk.inherentRiskScore);
+              const status = getStatusInfo(risk.currentStatus);
+              return (
+                <div key={risk.id} className="flex items-center gap-3 py-2 border-b last:border-0" data-testid={`top-risk-${risk.id}`}>
+                  <span className="text-xs text-muted-foreground w-5 shrink-0">{idx + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{risk.title}</p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="text-xs text-muted-foreground">{risk.riskCode}</span>
+                      <Badge variant="outline" className={`text-[10px] ${status.className}`}>{status.label}</Badge>
+                    </div>
+                  </div>
+                  <Badge className={`shrink-0 ${level.className}`}>{risk.inherentRiskScore}</Badge>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-primary" />
-              Risk Levels
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <RiskLevelBadge level="Critical" count={stats.criticalRisks} />
-            <RiskLevelBadge level="High" count={stats.highRisks} />
-            <RiskLevelBadge level="Medium" count={stats.mediumRisks} />
-            <RiskLevelBadge level="Low" count={stats.lowRisks} />
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />Workflow Status
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-4 gap-3">
+                <div className="text-center p-3 rounded-md bg-muted/50">
+                  <div className="text-lg font-bold">{stats.draftRisks}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Draft</div>
+                </div>
+                <div className="text-center p-3 rounded-md bg-blue-500/5">
+                  <div className="text-lg font-bold text-blue-500 dark:text-blue-400">{stats.reviewedRisks}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Reviewed</div>
+                </div>
+                <div className="text-center p-3 rounded-md bg-purple-500/5">
+                  <div className="text-lg font-bold text-purple-500 dark:text-purple-400">{stats.approvedRisks}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Approved</div>
+                </div>
+                <div className="text-center p-3 rounded-md bg-emerald-500/5">
+                  <div className="text-lg font-bold text-emerald-500 dark:text-emerald-400">{stats.validatedRisks}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Validated</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Activity className="h-4 w-4 text-primary" />Mitigation Progress
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Overall Completion</span>
+                  <span className="font-medium">{stats.totalMitigations > 0 ? Math.round((stats.completedMitigations / stats.totalMitigations) * 100) : 0}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${stats.totalMitigations > 0 ? (stats.completedMitigations / stats.totalMitigations) * 100 : 0}%` }} data-testid="progress-bar" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-center p-3 rounded-md bg-muted/50">
+                  <Clock className="h-4 w-4 mx-auto mb-1 text-amber-500" />
+                  <div className="text-lg font-bold">{stats.plannedMitigations}</div>
+                  <div className="text-[10px] text-muted-foreground">Planned</div>
+                </div>
+                <div className="text-center p-3 rounded-md bg-muted/50">
+                  <Activity className="h-4 w-4 mx-auto mb-1 text-blue-500" />
+                  <div className="text-lg font-bold">{stats.activeMitigations}</div>
+                  <div className="text-[10px] text-muted-foreground">In Progress</div>
+                </div>
+                <div className="text-center p-3 rounded-md bg-muted/50">
+                  <CheckCircle className="h-4 w-4 mx-auto mb-1 text-emerald-500" />
+                  <div className="text-lg font-bold">{stats.completedMitigations}</div>
+                  <div className="text-[10px] text-muted-foreground">Completed</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-primary" />
-              Risks by Category
-            </CardTitle>
+            <CardTitle className="text-base font-semibold">Risk Profile per Tema (T1)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {stats.risksByCategory.map((cat) => (
-              <div key={cat.name} className="flex items-center justify-between" data-testid={`category-stat-${cat.name.toLowerCase()}`}>
-                <div className="flex items-center gap-3">
-                  <div
-                    className="h-3 w-3 rounded-full"
-                    style={{ backgroundColor: cat.color }}
-                  />
-                  <span className="text-sm">{cat.name}</span>
+            {stats.risksByT1.map((t) => (
+              <div key={t.name} className="flex items-center justify-between">
+                <span className="text-sm">{t.name}</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full" style={{ width: `${stats.totalRisks > 0 ? (t.count / stats.totalRisks) * 100 : 0}%` }} />
+                  </div>
+                  <Badge variant="secondary">{t.count}</Badge>
                 </div>
-                <Badge variant="secondary">{cat.count}</Badge>
               </div>
             ))}
           </CardContent>
@@ -294,51 +312,18 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Activity className="h-4 w-4 text-primary" />
-              Mitigation Progress
-            </CardTitle>
+            <CardTitle className="text-base font-semibold">Distribusi per Unit Kerja</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Overall Completion</span>
-                <span className="font-medium">
-                  {stats.totalMitigations > 0
-                    ? Math.round((stats.completedMitigations / stats.totalMitigations) * 100)
-                    : 0}%
-                </span>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full transition-all duration-500"
-                  style={{
-                    width: `${stats.totalMitigations > 0 ? (stats.completedMitigations / stats.totalMitigations) * 100 : 0}%`,
-                  }}
-                  data-testid="progress-bar"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3 pt-2">
-              <div className="text-center p-3 rounded-md bg-muted/50">
-                <div className="text-lg font-bold text-amber-500 dark:text-amber-400">
-                  {stats.totalMitigations - stats.completedMitigations - stats.activeMitigations}
+          <CardContent className="space-y-3">
+            {stats.risksByOrgUnit.map((u) => (
+              <div key={u.name} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px]">{u.type === "branch" ? "Cabang" : "Direktorat"}</Badge>
+                  <span className="text-sm">{u.name}</span>
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5">Planned</div>
+                <Badge variant="secondary">{u.count}</Badge>
               </div>
-              <div className="text-center p-3 rounded-md bg-muted/50">
-                <div className="text-lg font-bold text-blue-500 dark:text-blue-400">
-                  {stats.activeMitigations}
-                </div>
-                <div className="text-xs text-muted-foreground mt-0.5">In Progress</div>
-              </div>
-              <div className="text-center p-3 rounded-md bg-muted/50">
-                <div className="text-lg font-bold text-emerald-500 dark:text-emerald-400">
-                  {stats.completedMitigations}
-                </div>
-                <div className="text-xs text-muted-foreground mt-0.5">Completed</div>
-              </div>
-            </div>
+            ))}
           </CardContent>
         </Card>
       </div>

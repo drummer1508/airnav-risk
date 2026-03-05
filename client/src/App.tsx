@@ -11,8 +11,9 @@ import { Moon, Sun } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import RisksPage from "@/pages/risks";
-import CategoriesPage from "@/pages/categories";
 import MitigationsPage from "@/pages/mitigations";
+import OrgUnitsPage from "@/pages/org-units";
+import TaxonomyPage from "@/pages/taxonomy";
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -28,8 +29,9 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/risks" component={RisksPage} />
-      <Route path="/categories" component={CategoriesPage} />
       <Route path="/mitigations" component={MitigationsPage} />
+      <Route path="/org-units" component={OrgUnitsPage} />
+      <Route path="/taxonomy" component={TaxonomyPage} />
       <Route component={NotFound} />
     </Switch>
   );

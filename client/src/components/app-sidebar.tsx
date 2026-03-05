@@ -2,8 +2,10 @@ import {
   LayoutDashboard,
   AlertTriangle,
   Shield,
-  FolderKanban,
+  FolderTree,
   Settings,
+  Building2,
+  FileText,
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
@@ -19,15 +21,22 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 
-const navItems = [
+const mainNav = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Risk Register", url: "/risks", icon: AlertTriangle },
-  { title: "Risk Categories", url: "/categories", icon: FolderKanban },
-  { title: "Mitigations", url: "/mitigations", icon: Shield },
+  { title: "Mitigasi", url: "/mitigations", icon: Shield },
+];
+
+const adminNav = [
+  { title: "Organisasi", url: "/org-units", icon: Building2 },
+  { title: "Taxonomy", url: "/taxonomy", icon: FolderTree },
 ];
 
 export function AppSidebar() {
   const [location] = useLocation();
+
+  const isActive = (url: string) =>
+    url === "/" ? location === "/" : location.startsWith(url);
 
   return (
     <Sidebar>
@@ -41,7 +50,7 @@ export function AppSidebar() {
               AirNav ERM
             </span>
             <span className="text-xs text-muted-foreground">
-              Risk Management
+              Enterprise Risk Management
             </span>
           </div>
         </div>
@@ -49,29 +58,45 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>Menu Utama</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive =
-                  item.url === "/"
-                    ? location === "/"
-                    : location.startsWith(item.url);
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      asChild
-                      data-active={isActive}
-                      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                    >
-                      <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+              {mainNav.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    data-active={isActive(item.url)}
+                    className="data-[active=true]:bg-sidebar-accent"
+                  >
+                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Admin Panel</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {adminNav.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    data-active={isActive(item.url)}
+                    className="data-[active=true]:bg-sidebar-accent"
+                  >
+                    <Link href={item.url} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -80,7 +105,7 @@ export function AppSidebar() {
       <SidebarFooter className="p-4">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Settings className="h-3 w-3" />
-          <span>AirNav Indonesia</span>
+          <span>AirNav Indonesia - ERM v2.0</span>
         </div>
       </SidebarFooter>
     </Sidebar>
