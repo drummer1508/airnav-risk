@@ -16,15 +16,41 @@ export async function seedDatabase() {
     ]);
   } else {
     const usernames = existingUsers.map(u => u.username);
-    const l2Users = [];
+    const newUsers: any[] = [];
     if (!usernames.includes("reviewer2")) {
-      l2Users.push({ username: "reviewer2", password: await bcrypt.hash("reviewer123", 10), fullName: "Siti Rahayu (L2)", role: "reviewer", line: 2, isActive: true });
+      newUsers.push({ username: "reviewer2", password: await bcrypt.hash("reviewer123", 10), fullName: "Siti Rahayu (L2)", role: "reviewer", line: 2, isActive: true });
     }
     if (!usernames.includes("approval2")) {
-      l2Users.push({ username: "approval2", password: await bcrypt.hash("approval123", 10), fullName: "VP Risk Management", role: "approval", line: 2, isActive: true });
+      newUsers.push({ username: "approval2", password: await bcrypt.hash("approval123", 10), fullName: "VP Risk Management", role: "approval", line: 2, isActive: true });
     }
-    if (l2Users.length > 0) {
-      await db.insert(users).values(l2Users);
+
+    const allOrgs = await db.select().from(orgUnits);
+    const gaOrg = allOrgs.find(o => o.name === "GA - Cabang Soekarno-Hatta");
+    if (gaOrg) {
+      const existingSubDivs = allOrgs.filter(o => o.parentId === gaOrg.id && o.type === "sub_division");
+      if (existingSubDivs.length === 0) {
+        const subs = await db.insert(orgUnits).values([
+          { name: "Sub Divisi Finansial - Cabang Soekarno-Hatta", parentId: gaOrg.id, type: "sub_division", level: "branch" },
+          { name: "Sub Divisi Personalia - Cabang Soekarno-Hatta", parentId: gaOrg.id, type: "sub_division", level: "branch" },
+        ]).returning();
+        const branch = allOrgs.find(o => o.name === "Cabang Soekarno-Hatta");
+        if (!usernames.includes("inputer_fin_cgt")) {
+          newUsers.push({ username: "inputer_fin_cgt", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Finansial CGK", role: "inputer", line: 1, orgUnitId: subs[0].id, isActive: true });
+        }
+        if (!usernames.includes("inputer_hr_cgt")) {
+          newUsers.push({ username: "inputer_hr_cgt", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Personalia CGK", role: "inputer", line: 1, orgUnitId: subs[1].id, isActive: true });
+        }
+        if (!usernames.includes("reviewer_ga_cgt")) {
+          newUsers.push({ username: "reviewer_ga_cgt", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Divisi GA CGK", role: "reviewer", line: 1, orgUnitId: gaOrg.id, isActive: true });
+        }
+        if (!usernames.includes("approval_gm_cgt") && branch) {
+          newUsers.push({ username: "approval_gm_cgt", password: await bcrypt.hash("approval123", 10), fullName: "GM Cabang Soekarno-Hatta", role: "approval", line: 1, orgUnitId: branch.id, isActive: true });
+        }
+      }
+    }
+
+    if (newUsers.length > 0) {
+      await db.insert(users).values(newUsers);
     }
   }
 
@@ -108,11 +134,24 @@ export async function seedDatabase() {
     { name: "Cabang Juanda", parentId: headOffice[0].id, type: "branch", level: "branch" },
   ]).returning();
 
-  await db.insert(orgUnits).values([
+  const branchDivs = await db.insert(orgUnits).values([
     { name: "Operasi - Cabang Soekarno-Hatta", parentId: branches[0].id, type: "branch_division", level: "branch" },
     { name: "Teknik - Cabang Soekarno-Hatta", parentId: branches[0].id, type: "branch_division", level: "branch" },
     { name: "Safety - Cabang Soekarno-Hatta", parentId: branches[0].id, type: "branch_division", level: "branch" },
     { name: "GA - Cabang Soekarno-Hatta", parentId: branches[0].id, type: "branch_division", level: "branch" },
+  ]).returning();
+
+  const gaDiv = branchDivs[3];
+  const subDivs = await db.insert(orgUnits).values([
+    { name: "Sub Divisi Finansial - Cabang Soekarno-Hatta", parentId: gaDiv.id, type: "sub_division", level: "branch" },
+    { name: "Sub Divisi Personalia - Cabang Soekarno-Hatta", parentId: gaDiv.id, type: "sub_division", level: "branch" },
+  ]).returning();
+
+  await db.insert(users).values([
+    { username: "inputer_fin_cgt", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Finansial CGK", role: "inputer", line: 1, orgUnitId: subDivs[0].id, isActive: true },
+    { username: "inputer_hr_cgt", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Personalia CGK", role: "inputer", line: 1, orgUnitId: subDivs[1].id, isActive: true },
+    { username: "reviewer_ga_cgt", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Divisi GA CGK", role: "reviewer", line: 1, orgUnitId: gaDiv.id, isActive: true },
+    { username: "approval_gm_cgt", password: await bcrypt.hash("approval123", 10), fullName: "GM Cabang Soekarno-Hatta", role: "approval", line: 1, orgUnitId: branches[0].id, isActive: true },
   ]);
 
   const allT3 = await db.select().from(taxonomyT3);

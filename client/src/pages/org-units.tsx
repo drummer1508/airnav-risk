@@ -20,6 +20,7 @@ const TYPE_LABELS: Record<string, string> = {
   division: "Divisi",
   branch: "Cabang",
   branch_division: "Divisi Cabang",
+  sub_division: "Sub Divisi",
 };
 
 function OrgUnitForm({ unit, allUnits, onSave, onCancel, isPending }: {

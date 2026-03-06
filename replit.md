@@ -44,6 +44,11 @@ A comprehensive Enterprise Risk Management (ERM) system for AirNav Indonesia, bu
   - approval1/approval123 (line 1, L1 approval/GM)
   - reviewer2/reviewer123 (line 2, L2 review)
   - approval2/approval123 (line 2, L2 approval)
+  - Branch users (Cabang Soekarno-Hatta):
+    - inputer_fin_cgt/inputer123 (inputer, Sub Divisi Finansial)
+    - inputer_hr_cgt/inputer123 (inputer, Sub Divisi Personalia)
+    - reviewer_ga_cgt/reviewer123 (reviewer, Kepala Divisi GA)
+    - approval_gm_cgt/approval123 (approval, GM Cabang)
 - Frontend AuthProvider with useAuth hook; UI gated by role and line
 - Backend enforces role+line checks on all workflow transitions
 
