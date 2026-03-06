@@ -61,6 +61,9 @@ A comprehensive Enterprise Risk Management (ERM) system for AirNav Indonesia, bu
     - inputer_hr_cgt/inputer123 (inputer, Sub Divisi Personalia)
     - reviewer_ga_cgt/reviewer123 (reviewer, Kepala Divisi GA)
     - approval_gm_cgt/approval123 (approval, GM Cabang)
+  - Top Management:
+    - dirut/approval123 (approval L1, Direktur Utama, Kantor Pusat - global visibility)
+    - komite_audit/approval123 (approval L1, Ketua Komite Audit, Kantor Pusat - global visibility)
   - Head Office users:
     - inputer_atc/inputer123 (inputer L1, Divisi Operasi ATC)
     - reviewer_atc/reviewer123 (reviewer L1, Divisi Operasi ATC)
@@ -68,9 +71,9 @@ A comprehensive Enterprise Risk Management (ERM) system for AirNav Indonesia, bu
     - inputer_keu/inputer123 (inputer L1, Divisi Keuangan)
     - reviewer_keu/reviewer123 (reviewer L1, Divisi Keuangan)
     - approval_dir_keu/approval123 (approval L1, Direktorat Keuangan)
-    - reviewer_risiko/reviewer123 (reviewer L2, Sub Divisi Risiko)
+    - reviewer_risiko/reviewer123 (reviewer L2, Sub Divisi Risiko - under Direktorat Keuangan)
     - inputer_risiko/inputer123 (inputer L1, Sub Divisi Risiko)
-    - reviewer_audit/reviewer123 (reviewer L3, Internal Audit)
+    - reviewer_audit/reviewer123 (reviewer L3, Internal Audit - directorate level)
     - inputer_audit/inputer123 (inputer L1, Internal Audit)
 - Frontend AuthProvider with useAuth hook; UI gated by role and line
 - Backend enforces role+line checks on all workflow transitions

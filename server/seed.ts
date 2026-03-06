@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { users, orgUnits, taxonomyT1, taxonomyT2, taxonomyT3, risks, mitigations, workflowLogs } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export async function seedDatabase() {
@@ -49,10 +50,11 @@ export async function seedDatabase() {
       }
     }
 
-    const corpPlanning = allOrgs.find(o => o.name === "Corporate Planning");
-    if (corpPlanning && !allOrgs.find(o => o.name === "Sub Divisi Risiko")) {
+    const dirKeuOrg = allOrgs.find(o => o.name === "Direktorat Keuangan");
+    const existingSubRisiko = allOrgs.find(o => o.name === "Sub Divisi Risiko");
+    if (dirKeuOrg && !existingSubRisiko) {
       const subRisiko = await db.insert(orgUnits).values([
-        { name: "Sub Divisi Risiko", parentId: corpPlanning.id, type: "sub_division", level: "head_office" },
+        { name: "Sub Divisi Risiko", parentId: dirKeuOrg.id, type: "sub_division", level: "head_office" },
       ]).returning();
       if (!usernames.includes("reviewer_risiko")) {
         newUsers.push({ username: "reviewer_risiko", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Sub Divisi Risiko", role: "reviewer", line: 2, orgUnitId: subRisiko[0].id, isActive: true });
@@ -60,15 +62,39 @@ export async function seedDatabase() {
       if (!usernames.includes("inputer_risiko")) {
         newUsers.push({ username: "inputer_risiko", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Risiko", role: "inputer", line: 1, orgUnitId: subRisiko[0].id, isActive: true });
       }
+    } else if (existingSubRisiko && dirKeuOrg && existingSubRisiko.parentId !== dirKeuOrg.id) {
+      await db.update(orgUnits).set({ parentId: dirKeuOrg.id }).where(eq(orgUnits.id, existingSubRisiko.id));
     }
 
     const internalAudit = allOrgs.find(o => o.name === "Internal Audit");
     if (internalAudit) {
+      if (internalAudit.type !== "directorate") {
+        await db.update(orgUnits).set({ type: "directorate" }).where(eq(orgUnits.id, internalAudit.id));
+      }
       if (!usernames.includes("reviewer_audit")) {
         newUsers.push({ username: "reviewer_audit", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Internal Audit", role: "reviewer", line: 3, orgUnitId: internalAudit.id, isActive: true });
       }
       if (!usernames.includes("inputer_audit")) {
         newUsers.push({ username: "inputer_audit", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Auditor", role: "inputer", line: 1, orgUnitId: internalAudit.id, isActive: true });
+      }
+    }
+
+    const kantorPusat = allOrgs.find(o => o.name === "Kantor Pusat");
+    if (kantorPusat) {
+      if (!usernames.includes("dirut")) {
+        newUsers.push({ username: "dirut", password: await bcrypt.hash("approval123", 10), fullName: "Direktur Utama", role: "approval", line: 1, orgUnitId: kantorPusat.id, isActive: true });
+      }
+      if (!allOrgs.find(o => o.name === "Komite Audit")) {
+        await db.insert(orgUnits).values([
+          { name: "Komite Audit", parentId: kantorPusat.id, type: "committee", level: "head_office" },
+        ]);
+      }
+      if (!usernames.includes("komite_audit")) {
+        newUsers.push({ username: "komite_audit", password: await bcrypt.hash("approval123", 10), fullName: "Ketua Komite Audit", role: "approval", line: 1, orgUnitId: kantorPusat.id, isActive: true });
+      }
+      const existingKomiteUser = existingUsers.find(u => u.username === "komite_audit");
+      if (existingKomiteUser && existingKomiteUser.orgUnitId !== kantorPusat.id) {
+        await db.update(users).set({ orgUnitId: kantorPusat.id }).where(eq(users.id, existingKomiteUser.id));
       }
     }
 
@@ -163,7 +189,8 @@ export async function seedDatabase() {
     { name: "Direktorat Safety", parentId: headOffice[0].id, type: "directorate", level: "head_office" },
     { name: "Sekretaris Perusahaan", parentId: headOffice[0].id, type: "function", level: "head_office" },
     { name: "Corporate Planning", parentId: headOffice[0].id, type: "function", level: "head_office" },
-    { name: "Internal Audit", parentId: headOffice[0].id, type: "function", level: "head_office" },
+    { name: "Internal Audit", parentId: headOffice[0].id, type: "directorate", level: "head_office" },
+    { name: "Komite Audit", parentId: headOffice[0].id, type: "committee", level: "head_office" },
   ]).returning();
 
   const divisions = await db.insert(orgUnits).values([
@@ -180,7 +207,7 @@ export async function seedDatabase() {
   ]).returning();
 
   const subDivRisiko = await db.insert(orgUnits).values([
-    { name: "Sub Divisi Risiko", parentId: direktorats[6].id, type: "sub_division", level: "head_office" },
+    { name: "Sub Divisi Risiko", parentId: direktorats[2].id, type: "sub_division", level: "head_office" },
   ]).returning();
 
   await db.insert(users).values([
@@ -194,6 +221,8 @@ export async function seedDatabase() {
     { username: "inputer_risiko", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Risiko", role: "inputer", line: 1, orgUnitId: subDivRisiko[0].id, isActive: true },
     { username: "reviewer_audit", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Internal Audit", role: "reviewer", line: 3, orgUnitId: direktorats[7].id, isActive: true },
     { username: "inputer_audit", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Auditor", role: "inputer", line: 1, orgUnitId: direktorats[7].id, isActive: true },
+    { username: "dirut", password: await bcrypt.hash("approval123", 10), fullName: "Direktur Utama", role: "approval", line: 1, orgUnitId: headOffice[0].id, isActive: true },
+    { username: "komite_audit", password: await bcrypt.hash("approval123", 10), fullName: "Ketua Komite Audit", role: "approval", line: 1, orgUnitId: headOffice[0].id, isActive: true },
   ]);
 
   const branches = await db.insert(orgUnits).values([
