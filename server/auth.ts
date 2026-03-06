@@ -32,6 +32,7 @@ declare module "express-session" {
     fullName: string;
     username: string;
     line: number;
+    orgUnitId: number | null;
   }
 }
 

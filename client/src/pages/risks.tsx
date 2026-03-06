@@ -469,7 +469,7 @@ export default function RisksPage() {
   const [detailRisk, setDetailRisk] = useState<Risk | null>(null);
   const [editingRisk, setEditingRisk] = useState<Risk | undefined>();
   const { toast } = useToast();
-  const { canCreateRisk, isSysadmin } = useAuth();
+  const { canCreateRisk, isSysadmin, user, isReviewer, isInputer } = useAuth();
 
   const { data: allRisks = [], isLoading } = useQuery<Risk[]>({ queryKey: ["/api/risks"] });
   const { data: orgUnits = [] } = useQuery<OrgUnit[]>({ queryKey: ["/api/org-units"] });
@@ -593,8 +593,12 @@ export default function RisksPage() {
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Button size="icon" variant="ghost" onClick={() => setDetailRisk(risk)} data-testid={`button-view-risk-${risk.id}`}><Eye className="h-4 w-4" /></Button>
-                        <Button size="icon" variant="ghost" onClick={() => { setEditingRisk(risk); setFormOpen(true); }} data-testid={`button-edit-risk-${risk.id}`}><Pencil className="h-4 w-4" /></Button>
-                        {canCreateRisk && <Button size="icon" variant="ghost" onClick={() => deleteMut.mutate(risk.id)} data-testid={`button-delete-risk-${risk.id}`}><Trash2 className="h-4 w-4" /></Button>}
+                        {(isSysadmin || !risk.createdBy || risk.createdBy === user?.id || (!isInputer && !isReviewer)) && (
+                          <Button size="icon" variant="ghost" onClick={() => { setEditingRisk(risk); setFormOpen(true); }} data-testid={`button-edit-risk-${risk.id}`}><Pencil className="h-4 w-4" /></Button>
+                        )}
+                        {canCreateRisk && (isSysadmin || !risk.createdBy || risk.createdBy === user?.id) && (
+                          <Button size="icon" variant="ghost" onClick={() => deleteMut.mutate(risk.id)} data-testid={`button-delete-risk-${risk.id}`}><Trash2 className="h-4 w-4" /></Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

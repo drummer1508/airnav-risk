@@ -35,6 +35,16 @@ A comprehensive Enterprise Risk Management (ERM) system for AirNav Indonesia, bu
 - `workflow_logs`: riskId, fromStatus, toStatus, actorName, actorRole, comments, timestamp
 - `audit_trails`: tableName, recordId, fieldName, oldValue, newValue, changedBy, changedByName, changedByRole, changedAt
 
+## Organizational Data Scoping
+- Users with an orgUnitId see only risks/mitigations/stats for their org unit and all descendant units
+- GM Cabang (branch level): sees all data across branch divisions and sub-divisions
+- Kepala Divisi (branch_division level): sees data for their division and sub-divisions only
+- Inputer/Reviewer: can see all data in their org scope but can only edit/delete risks they created themselves
+- Approval role: can edit any risk within their org scope (for corrections during approval)
+- Sysadmin: sees all data globally, no org restriction
+- Users without orgUnitId (legacy): see all data (no org filter applied)
+- Dashboard stats are also scoped to the user's org unit hierarchy
+
 ## Authentication & RBAC
 - Session-based auth with express-session + connect-pg-simple
 - Default users:

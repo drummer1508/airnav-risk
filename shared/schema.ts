@@ -71,6 +71,7 @@ export const risks = pgTable("risks", {
   justification: text("justification"),
   currentStatus: text("current_status").notNull().default("draft"),
   rkapYear: integer("rkap_year"),
+  createdBy: integer("created_by"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

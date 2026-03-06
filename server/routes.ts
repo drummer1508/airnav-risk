@@ -4,6 +4,32 @@ import { storage } from "./storage";
 import { insertRiskSchema, insertMitigationSchema, insertOrgUnitSchema, insertWorkflowLogSchema, insertUserSchema, insertAuditTrailSchema } from "@shared/schema";
 import { setupSession, hashPassword, verifyPassword, requireAuth, requireRole } from "./auth";
 
+type OrgUnitRow = { id: number; parentId: number | null; type: string; level: string; name: string };
+
+function getOrgUnitDescendants(orgUnitId: number, allUnits: OrgUnitRow[]): number[] {
+  const result: number[] = [orgUnitId];
+  const queue = [orgUnitId];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const u of allUnits) {
+      if (u.parentId === current && !result.includes(u.id)) {
+        result.push(u.id);
+        queue.push(u.id);
+      }
+    }
+  }
+  return result;
+}
+
+async function getUserVisibleOrgIds(req: any): Promise<number[] | null> {
+  const role = req.session.role;
+  if (role === "sysadmin") return null;
+  const orgUnitId = req.session.orgUnitId;
+  if (!orgUnitId) return null;
+  const allUnits = await storage.getOrgUnits();
+  return getOrgUnitDescendants(orgUnitId, allUnits);
+}
+
 function getValidTransitions(role: string, line: number): Record<string, string[]> {
   if (role === "sysadmin") {
     return {
@@ -69,6 +95,7 @@ export async function registerRoutes(
     req.session.fullName = user.fullName;
     req.session.username = user.username;
     req.session.line = user.line;
+    req.session.orgUnitId = user.orgUnitId ?? null;
     const { password: _, ...safeUser } = user;
     res.json(safeUser);
   });
@@ -240,8 +267,13 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
-  app.get("/api/risks", requireAuth, async (_req, res) => {
+  app.get("/api/risks", requireAuth, async (req, res) => {
     const allRisks = await storage.getRisks();
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    if (visibleOrgIds) {
+      const filtered = allRisks.filter(r => r.orgUnitId && visibleOrgIds.includes(r.orgUnitId));
+      return res.json(filtered);
+    }
     res.json(allRisks);
   });
 
@@ -249,13 +281,22 @@ export async function registerRoutes(
     const id = parseInt(req.params.id);
     const risk = await storage.getRisk(id);
     if (!risk) return res.status(404).json({ message: "Not found" });
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    if (visibleOrgIds && risk.orgUnitId && !visibleOrgIds.includes(risk.orgUnitId)) {
+      return res.status(403).json({ message: "Tidak memiliki akses ke data organisasi ini" });
+    }
     res.json(risk);
   });
 
   app.post("/api/risks", requireRole("sysadmin", "inputer"), async (req, res) => {
     const parsed = insertRiskSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const risk = await storage.createRisk(parsed.data);
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    if (visibleOrgIds && parsed.data.orgUnitId && !visibleOrgIds.includes(parsed.data.orgUnitId)) {
+      return res.status(403).json({ message: "Anda tidak dapat membuat risiko untuk organisasi di luar cakupan Anda" });
+    }
+    const riskData = { ...parsed.data, createdBy: req.session.userId! };
+    const risk = await storage.createRisk(riskData);
     res.status(201).json(risk);
   });
 
@@ -265,24 +306,54 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const existing = await storage.getRisk(id);
     if (!existing) return res.status(404).json({ message: "Not found" });
+    const role = req.session.role!;
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    if (visibleOrgIds && existing.orgUnitId && !visibleOrgIds.includes(existing.orgUnitId)) {
+      return res.status(403).json({ message: "Tidak memiliki akses ke data organisasi ini" });
+    }
+    if (role === "inputer" || role === "reviewer") {
+      if (existing.createdBy && existing.createdBy !== req.session.userId) {
+        return res.status(403).json({ message: "Anda hanya bisa mengubah risiko yang dibuat oleh Anda sendiri" });
+      }
+    }
+    const { createdBy: _cb, ...safeData } = parsed.data as any;
     await storage.createAuditTrailsForChanges(
-      "risks", id, existing as any, parsed.data as any,
+      "risks", id, existing as any, safeData,
       req.session.userId!, req.session.fullName!, req.session.role!
     );
-    const risk = await storage.updateRisk(id, parsed.data);
+    const risk = await storage.updateRisk(id, safeData);
     if (!risk) return res.status(404).json({ message: "Not found" });
     res.json(risk);
   });
 
   app.delete("/api/risks/:id", requireRole("sysadmin", "inputer"), async (req, res) => {
     const id = parseInt(req.params.id);
+    const existing = await storage.getRisk(id);
+    if (!existing) return res.status(404).json({ message: "Not found" });
+    const role = req.session.role!;
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    if (visibleOrgIds && existing.orgUnitId && !visibleOrgIds.includes(existing.orgUnitId)) {
+      return res.status(403).json({ message: "Tidak memiliki akses ke data organisasi ini" });
+    }
+    if (role === "inputer") {
+      if (existing.createdBy && existing.createdBy !== req.session.userId) {
+        return res.status(403).json({ message: "Anda hanya bisa menghapus risiko yang dibuat oleh Anda sendiri" });
+      }
+    }
     const ok = await storage.deleteRisk(id);
     if (!ok) return res.status(404).json({ message: "Not found" });
     res.json({ success: true });
   });
 
-  app.get("/api/mitigations", requireAuth, async (_req, res) => {
+  app.get("/api/mitigations", requireAuth, async (req, res) => {
     const mits = await storage.getMitigations();
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    if (visibleOrgIds) {
+      const allRisks = await storage.getRisks();
+      const visibleRiskIds = allRisks.filter(r => r.orgUnitId && visibleOrgIds.includes(r.orgUnitId)).map(r => r.id);
+      const filtered = mits.filter(m => visibleRiskIds.includes(m.riskId));
+      return res.json(filtered);
+    }
     res.json(mits);
   });
 
@@ -295,6 +366,13 @@ export async function registerRoutes(
   app.post("/api/mitigations", requireRole("sysadmin", "inputer"), async (req, res) => {
     const parsed = insertMitigationSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    if (visibleOrgIds) {
+      const risk = await storage.getRisk(parsed.data.riskId);
+      if (!risk || (risk.orgUnitId && !visibleOrgIds.includes(risk.orgUnitId))) {
+        return res.status(403).json({ message: "Tidak memiliki akses ke risiko organisasi ini" });
+      }
+    }
     const mit = await storage.createMitigation(parsed.data);
     res.status(201).json(mit);
   });
@@ -306,6 +384,13 @@ export async function registerRoutes(
     const existing = await storage.getMitigations();
     const oldMit = existing.find(m => m.id === id);
     if (!oldMit) return res.status(404).json({ message: "Not found" });
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    if (visibleOrgIds) {
+      const risk = await storage.getRisk(oldMit.riskId);
+      if (!risk || (risk.orgUnitId && !visibleOrgIds.includes(risk.orgUnitId))) {
+        return res.status(403).json({ message: "Tidak memiliki akses ke risiko organisasi ini" });
+      }
+    }
     await storage.createAuditTrailsForChanges(
       "mitigations", id, oldMit as any, parsed.data as any,
       req.session.userId!, req.session.fullName!, req.session.role!
@@ -317,6 +402,16 @@ export async function registerRoutes(
 
   app.delete("/api/mitigations/:id", requireRole("sysadmin", "inputer"), async (req, res) => {
     const id = parseInt(req.params.id);
+    const existing = await storage.getMitigations();
+    const oldMit = existing.find(m => m.id === id);
+    if (!oldMit) return res.status(404).json({ message: "Not found" });
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    if (visibleOrgIds) {
+      const risk = await storage.getRisk(oldMit.riskId);
+      if (!risk || (risk.orgUnitId && !visibleOrgIds.includes(risk.orgUnitId))) {
+        return res.status(403).json({ message: "Tidak memiliki akses ke risiko organisasi ini" });
+      }
+    }
     const ok = await storage.deleteMitigation(id);
     if (!ok) return res.status(404).json({ message: "Not found" });
     res.json({ success: true });
@@ -336,6 +431,11 @@ export async function registerRoutes(
     const line = req.session.line ?? 1;
     const risk = await storage.getRisk(parsed.data.riskId);
     if (!risk) return res.status(404).json({ message: "Risiko tidak ditemukan" });
+
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    if (visibleOrgIds && risk.orgUnitId && !visibleOrgIds.includes(risk.orgUnitId)) {
+      return res.status(403).json({ message: "Tidak memiliki akses ke risiko organisasi ini" });
+    }
 
     const fromStatus = risk.currentStatus;
     const toStatus = parsed.data.toStatus;
@@ -379,9 +479,15 @@ export async function registerRoutes(
     res.json(trails);
   });
 
-  app.get("/api/dashboard/stats", requireAuth, async (_req, res) => {
-    const allRisks = await storage.getRisks();
-    const allMitigations = await storage.getMitigations();
+  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
+    let allRisks = await storage.getRisks();
+    let allMitigations = await storage.getMitigations();
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    if (visibleOrgIds) {
+      allRisks = allRisks.filter(r => r.orgUnitId && visibleOrgIds.includes(r.orgUnitId));
+      const visibleRiskIds = allRisks.map(r => r.id);
+      allMitigations = allMitigations.filter(m => visibleRiskIds.includes(m.riskId));
+    }
     const t1s = await storage.getTaxonomyT1();
     const orgUnitsList = await storage.getOrgUnits();
 
