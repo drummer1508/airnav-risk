@@ -15,9 +15,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import type { Risk, OrgUnit, TaxonomyT1, TaxonomyT2, TaxonomyT3, WorkflowLog, Mitigation } from "@shared/schema";
-import { getRiskLevelInfo, getStatusInfo, getMitigationStatusInfo, getStrategyInfo, IMPACT_CRITERIA_LABELS, IMPACT_DESCRIPTIONS, LIKELIHOOD_DESCRIPTIONS, formatCurrency } from "@/lib/risk-helpers";
+import { getRiskLevelInfo, getStatusInfo, getMitigationStatusInfo, getStrategyInfo, getAvailableWorkflowActions, IMPACT_CRITERIA_LABELS, IMPACT_DESCRIPTIONS, LIKELIHOOD_DESCRIPTIONS, formatCurrency } from "@/lib/risk-helpers";
 import { useAuth } from "@/lib/auth";
-import { Plus, Search, AlertTriangle, Pencil, Trash2, Filter, Eye, History, ChevronRight } from "lucide-react";
+import { AuditTrailIcon, AuditTrailList } from "@/components/audit-trail";
+import { Plus, Search, AlertTriangle, Pencil, Trash2, Filter, Eye, History, ChevronRight, Send } from "lucide-react";
 
 function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }: {
   risk?: Risk; orgUnits: OrgUnit[]; t1s: TaxonomyT1[]; t2s: TaxonomyT2[]; t3s: TaxonomyT3[];
@@ -258,18 +259,48 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
   );
 }
 
-function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s }: {
+function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s, onStatusChange }: {
   risk: Risk; orgUnits: OrgUnit[]; t1s: TaxonomyT1[]; t2s: TaxonomyT2[]; t3s: TaxonomyT3[];
+  onStatusChange?: () => void;
 }) {
   const level = getRiskLevelInfo(risk.inherentRiskScore);
   const status = getStatusInfo(risk.currentStatus);
   const { data: wfLogs = [] } = useQuery<WorkflowLog[]>({ queryKey: ["/api/workflow-logs", risk.id] });
   const { data: mits = [] } = useQuery<Mitigation[]>({ queryKey: ["/api/mitigations/risk", risk.id] });
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [wfComment, setWfComment] = useState("");
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const orgUnit = orgUnits.find(u => u.id === risk.orgUnitId);
   const t1 = t1s.find(t => t.id === risk.t1Id);
   const t2 = t2s.find(t => t.id === risk.t2Id);
   const t3 = t3s.find(t => t.id === risk.t3Id);
+
+  const actions = user ? getAvailableWorkflowActions(risk.currentStatus, user.role, user.line) : [];
+
+  const workflowMut = useMutation({
+    mutationFn: async ({ toStatus, comment }: { toStatus: string; comment: string }) => {
+      return apiRequest("POST", "/api/workflow-logs", {
+        riskId: risk.id,
+        fromStatus: risk.currentStatus,
+        toStatus,
+        actorName: user!.fullName,
+        actorRole: user!.role,
+        comments: comment || undefined,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/risks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/workflow-logs", risk.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      setPendingAction(null);
+      setWfComment("");
+      toast({ title: "Status berhasil diubah" });
+      onStatusChange?.();
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
 
   return (
     <div className="space-y-4 max-h-[70vh] overflow-y-auto">
@@ -277,11 +308,67 @@ function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s }: {
         <Badge variant="outline" className="text-xs">{risk.riskCode}</Badge>
         <Badge className={status.className}>{status.label}</Badge>
         <Badge className={level.className}>{risk.inherentRiskScore} - {level.label}</Badge>
+        <AuditTrailIcon tableName="risks" recordId={risk.id} />
       </div>
 
+      {actions.length > 0 && (
+        <div className="border rounded-lg p-3 bg-muted/20 space-y-3">
+          <Label className="font-semibold text-sm flex items-center gap-2"><Send className="h-4 w-4" />Aksi Workflow</Label>
+          {pendingAction ? (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Transisi: <Badge variant="outline" className={getStatusInfo(risk.currentStatus).className}>{getStatusInfo(risk.currentStatus).label}</Badge>
+                {" "}<ChevronRight className="h-3 w-3 inline" />{" "}
+                <Badge variant="outline" className={getStatusInfo(pendingAction).className}>{getStatusInfo(pendingAction).label}</Badge>
+              </p>
+              <Textarea
+                placeholder="Komentar (opsional untuk approve, wajib untuk pengembalian)"
+                value={wfComment}
+                onChange={(e) => setWfComment(e.target.value)}
+                className="text-sm min-h-[60px]"
+                data-testid="textarea-workflow-comment"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => workflowMut.mutate({ toStatus: pendingAction, comment: wfComment })}
+                  disabled={workflowMut.isPending || (["returned_to_inputer", "returned_to_reviewer", "l2_returned"].includes(pendingAction) && !wfComment.trim())}
+                  data-testid="button-confirm-workflow"
+                >
+                  {workflowMut.isPending ? "Memproses..." : "Konfirmasi"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => { setPendingAction(null); setWfComment(""); }} data-testid="button-cancel-workflow">
+                  Batal
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {actions.map((action) => (
+                <Button
+                  key={action.toStatus}
+                  size="sm"
+                  variant={action.variant}
+                  onClick={() => {
+                    if (action.requireComment) {
+                      setPendingAction(action.toStatus);
+                    } else {
+                      setPendingAction(action.toStatus);
+                    }
+                  }}
+                  data-testid={`button-workflow-${action.toStatus}`}
+                >
+                  {action.label}
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4 text-sm">
-        <div><span className="text-muted-foreground">Unit Kerja:</span> <span className="font-medium ml-1">{orgUnit?.name || "-"}</span></div>
-        <div><span className="text-muted-foreground">Risk Owner:</span> <span className="font-medium ml-1">{risk.riskOwner || "-"}</span></div>
+        <div className="flex items-center gap-1"><span className="text-muted-foreground">Unit Kerja:</span> <span className="font-medium ml-1">{orgUnit?.name || "-"}</span><AuditTrailIcon tableName="risks" recordId={risk.id} fieldName="orgUnitId" /></div>
+        <div className="flex items-center gap-1"><span className="text-muted-foreground">Risk Owner:</span> <span className="font-medium ml-1">{risk.riskOwner || "-"}</span><AuditTrailIcon tableName="risks" recordId={risk.id} fieldName="riskOwner" /></div>
         <div><span className="text-muted-foreground">Tahun RKAP:</span> <span className="font-medium ml-1">{risk.rkapYear || "-"}</span></div>
         <div><span className="text-muted-foreground">Taxonomy:</span> <span className="font-medium ml-1">{t1?.name} {t2 ? `> ${t2.name}` : ""} {t3 ? `> ${t3.name}` : ""}</span></div>
       </div>
@@ -292,7 +379,10 @@ function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s }: {
 
       <Separator />
       <div className="space-y-2">
-        <Label className="font-semibold">Scoring Detail</Label>
+        <div className="flex items-center gap-2">
+          <Label className="font-semibold">Scoring Detail</Label>
+          <AuditTrailIcon tableName="risks" recordId={risk.id} fieldName="impactFinancial" />
+        </div>
         <div className="grid grid-cols-3 gap-2 text-sm">
           {Object.entries(IMPACT_CRITERIA_LABELS).map(([key, label]) => {
             const fieldKey = `impact${key.charAt(0).toUpperCase() + key.slice(1)}` as keyof Risk;
@@ -327,7 +417,8 @@ function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s }: {
                 <div key={m.id} className="p-3 rounded-md bg-muted/30 space-y-1">
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className={st.className}>{st.label}</Badge>
-                    <span className="text-sm font-medium">{m.actionDescription.slice(0, 80)}{m.actionDescription.length > 80 ? "..." : ""}</span>
+                    <span className="text-sm font-medium flex-1">{m.actionDescription.slice(0, 80)}{m.actionDescription.length > 80 ? "..." : ""}</span>
+                    <AuditTrailIcon tableName="mitigations" recordId={m.id} />
                   </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     <Badge variant="outline" className={s.className}>{s.label}</Badge>
@@ -341,27 +432,32 @@ function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s }: {
         </>
       )}
 
-      {wfLogs.length > 0 && (
-        <>
-          <Separator />
-          <div className="space-y-2">
-            <Label className="font-semibold flex items-center gap-2"><History className="h-4 w-4" />Workflow History</Label>
-            {wfLogs.map(log => (
-              <div key={log.id} className="flex items-start gap-3 p-2 text-sm">
-                <div className="flex items-center gap-1 shrink-0 text-xs text-muted-foreground mt-0.5">
-                  <Badge variant="outline" className={getStatusInfo(log.fromStatus).className}>{log.fromStatus}</Badge>
-                  <ChevronRight className="h-3 w-3" />
-                  <Badge variant="outline" className={getStatusInfo(log.toStatus).className}>{log.toStatus}</Badge>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs"><span className="font-medium">{log.actorName}</span> <span className="text-muted-foreground">({log.actorRole})</span></p>
-                  {log.comments && <p className="text-xs text-muted-foreground mt-0.5">{log.comments}</p>}
-                </div>
-              </div>
-            ))}
+      <Separator />
+      <div className="space-y-2">
+        <Label className="font-semibold flex items-center gap-2"><History className="h-4 w-4" />Workflow History</Label>
+        {wfLogs.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Belum ada riwayat workflow.</p>
+        ) : wfLogs.map(log => (
+          <div key={log.id} className="flex items-start gap-3 p-2 text-sm border-b last:border-0">
+            <div className="flex items-center gap-1 shrink-0 text-xs text-muted-foreground mt-0.5">
+              <Badge variant="outline" className={getStatusInfo(log.fromStatus).className}>{getStatusInfo(log.fromStatus).label}</Badge>
+              <ChevronRight className="h-3 w-3" />
+              <Badge variant="outline" className={getStatusInfo(log.toStatus).className}>{getStatusInfo(log.toStatus).label}</Badge>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs"><span className="font-medium">{log.actorName}</span> <span className="text-muted-foreground">({log.actorRole})</span></p>
+              {log.comments && <p className="text-xs text-muted-foreground mt-0.5 italic">"{log.comments}"</p>}
+              {log.timestamp && <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(log.timestamp).toLocaleString("id-ID")}</p>}
+            </div>
           </div>
-        </>
-      )}
+        ))}
+      </div>
+
+      <Separator />
+      <div className="space-y-2">
+        <Label className="font-semibold flex items-center gap-2"><History className="h-4 w-4" />Audit Trail</Label>
+        <AuditTrailList tableName="risks" recordId={risk.id} />
+      </div>
     </div>
   );
 }
@@ -445,9 +541,14 @@ export default function RisksPage() {
           <SelectContent>
             <SelectItem value="all">Semua Status</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="reviewed">Reviewed</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="validated">Validated</SelectItem>
+            <SelectItem value="submitted">Diajukan</SelectItem>
+            <SelectItem value="returned_to_inputer">Dikembalikan ke Inputer</SelectItem>
+            <SelectItem value="reviewed">Direview L1</SelectItem>
+            <SelectItem value="returned_to_reviewer">Dikembalikan ke Reviewer</SelectItem>
+            <SelectItem value="l1_approved">Disetujui L1</SelectItem>
+            <SelectItem value="l2_review">Review L2</SelectItem>
+            <SelectItem value="l2_returned">Dikembalikan L2</SelectItem>
+            <SelectItem value="l2_finalized">Final L2</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -507,7 +608,7 @@ export default function RisksPage() {
       <Dialog open={!!detailRisk} onOpenChange={(open) => { if (!open) setDetailRisk(null); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>{detailRisk?.title}</DialogTitle></DialogHeader>
-          {detailRisk && <RiskDetailDialog risk={detailRisk} orgUnits={orgUnits} t1s={t1s} t2s={t2s} t3s={t3s} />}
+          {detailRisk && <RiskDetailDialog risk={detailRisk} orgUnits={orgUnits} t1s={t1s} t2s={t2s} t3s={t3s} onStatusChange={() => setDetailRisk(null)} />}
         </DialogContent>
       </Dialog>
     </div>

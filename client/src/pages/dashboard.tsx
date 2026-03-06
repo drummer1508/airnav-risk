@@ -21,7 +21,11 @@ import type { OrgUnit } from "@shared/schema";
 interface DashboardStats {
   totalRisks: number;
   draftRisks: number;
+  submittedRisks: number;
   reviewedRisks: number;
+  l1ApprovedRisks: number;
+  l2ReviewRisks: number;
+  l2FinalizedRisks: number;
   approvedRisks: number;
   validatedRisks: number;
   criticalRisks: number;
@@ -165,7 +169,7 @@ export default function Dashboard() {
         <StatCard title="Total Risiko" value={stats.totalRisks} icon={AlertTriangle} description={`${stats.criticalRisks} sangat tinggi, ${stats.highRisks} tinggi`} iconColor="text-primary" />
         <StatCard title="Risiko Sangat Tinggi" value={stats.criticalRisks} icon={AlertOctagon} description="Skor 16-25, perlu tindakan segera" iconColor="text-red-500 dark:text-red-400" />
         <StatCard title="Mitigasi Aktif" value={stats.activeMitigations} icon={Activity} description={`${stats.completedMitigations} selesai dari ${stats.totalMitigations}`} iconColor="text-amber-500 dark:text-amber-400" />
-        <StatCard title="Tervalidasi" value={stats.validatedRisks} icon={ShieldCheck} description="Risiko telah divalidasi Lini 2" iconColor="text-emerald-500 dark:text-emerald-400" />
+        <StatCard title="Final L2" value={stats.l2FinalizedRisks} icon={ShieldCheck} description="Risiko telah difinalisasi Lini 2" iconColor="text-emerald-500 dark:text-emerald-400" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -231,22 +235,30 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-4 gap-3">
-                <div className="text-center p-3 rounded-md bg-muted/50">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <div className="text-center p-2 rounded-md bg-muted/50">
                   <div className="text-lg font-bold">{stats.draftRisks}</div>
                   <div className="text-[10px] text-muted-foreground mt-0.5">Draft</div>
                 </div>
-                <div className="text-center p-3 rounded-md bg-blue-500/5">
-                  <div className="text-lg font-bold text-blue-500 dark:text-blue-400">{stats.reviewedRisks}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">Reviewed</div>
+                <div className="text-center p-2 rounded-md bg-blue-500/5">
+                  <div className="text-lg font-bold text-blue-500 dark:text-blue-400">{stats.submittedRisks}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Diajukan</div>
                 </div>
-                <div className="text-center p-3 rounded-md bg-purple-500/5">
-                  <div className="text-lg font-bold text-purple-500 dark:text-purple-400">{stats.approvedRisks}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">Approved</div>
+                <div className="text-center p-2 rounded-md bg-indigo-500/5">
+                  <div className="text-lg font-bold text-indigo-500 dark:text-indigo-400">{stats.reviewedRisks}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Review L1</div>
                 </div>
-                <div className="text-center p-3 rounded-md bg-emerald-500/5">
-                  <div className="text-lg font-bold text-emerald-500 dark:text-emerald-400">{stats.validatedRisks}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">Validated</div>
+                <div className="text-center p-2 rounded-md bg-purple-500/5">
+                  <div className="text-lg font-bold text-purple-500 dark:text-purple-400">{stats.l1ApprovedRisks}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Approved L1</div>
+                </div>
+                <div className="text-center p-2 rounded-md bg-cyan-500/5">
+                  <div className="text-lg font-bold text-cyan-500 dark:text-cyan-400">{stats.l2ReviewRisks}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Review L2</div>
+                </div>
+                <div className="text-center p-2 rounded-md bg-emerald-500/5">
+                  <div className="text-lg font-bold text-emerald-500 dark:text-emerald-400">{stats.l2FinalizedRisks}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Final L2</div>
                 </div>
               </div>
             </CardContent>

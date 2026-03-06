@@ -1,14 +1,15 @@
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, risks, orgUnits, taxonomyT1, taxonomyT2, taxonomyT3,
-  mitigations, workflowLogs,
+  mitigations, workflowLogs, auditTrails,
   type User, type InsertUser,
   type Risk, type InsertRisk,
   type OrgUnit, type InsertOrgUnit,
   type TaxonomyT1, type TaxonomyT2, type TaxonomyT3,
   type Mitigation, type InsertMitigation,
   type WorkflowLog, type InsertWorkflowLog,
+  type AuditTrail, type InsertAuditTrail,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -52,6 +53,11 @@ export interface IStorage {
 
   getWorkflowLogs(riskId: number): Promise<WorkflowLog[]>;
   createWorkflowLog(log: InsertWorkflowLog): Promise<WorkflowLog>;
+
+  getAuditTrails(tableName: string, recordId: number): Promise<AuditTrail[]>;
+  getFieldAuditTrails(tableName: string, recordId: number, fieldName: string): Promise<AuditTrail[]>;
+  createAuditTrail(trail: InsertAuditTrail): Promise<AuditTrail>;
+  createAuditTrailsForChanges(tableName: string, recordId: number, oldRecord: Record<string, any>, newData: Record<string, any>, userId: number, userName: string, userRole: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -223,6 +229,50 @@ export class DatabaseStorage implements IStorage {
   async createWorkflowLog(log: InsertWorkflowLog): Promise<WorkflowLog> {
     const [result] = await db.insert(workflowLogs).values(log).returning();
     return result;
+  }
+
+  async getAuditTrails(tableName: string, recordId: number): Promise<AuditTrail[]> {
+    return db.select().from(auditTrails)
+      .where(and(eq(auditTrails.tableName, tableName), eq(auditTrails.recordId, recordId)));
+  }
+
+  async getFieldAuditTrails(tableName: string, recordId: number, fieldName: string): Promise<AuditTrail[]> {
+    return db.select().from(auditTrails)
+      .where(and(
+        eq(auditTrails.tableName, tableName),
+        eq(auditTrails.recordId, recordId),
+        eq(auditTrails.fieldName, fieldName)
+      ));
+  }
+
+  async createAuditTrail(trail: InsertAuditTrail): Promise<AuditTrail> {
+    const [result] = await db.insert(auditTrails).values(trail).returning();
+    return result;
+  }
+
+  async createAuditTrailsForChanges(
+    tableName: string, recordId: number,
+    oldRecord: Record<string, any>, newData: Record<string, any>,
+    userId: number, userName: string, userRole: string
+  ): Promise<void> {
+    const skipFields = ["id", "createdAt", "updatedAt", "impactScore", "inherentRiskScore", "residualRiskScore"];
+    const entries: InsertAuditTrail[] = [];
+    for (const [key, newVal] of Object.entries(newData)) {
+      if (skipFields.includes(key)) continue;
+      const oldVal = oldRecord[key];
+      const oldStr = oldVal === null || oldVal === undefined ? null : String(oldVal);
+      const newStr = newVal === null || newVal === undefined ? null : String(newVal);
+      if (oldStr !== newStr) {
+        entries.push({
+          tableName, recordId, fieldName: key,
+          oldValue: oldStr, newValue: newStr,
+          changedBy: userId, changedByName: userName, changedByRole: userRole,
+        });
+      }
+    }
+    if (entries.length > 0) {
+      await db.insert(auditTrails).values(entries);
+    }
   }
 }
 

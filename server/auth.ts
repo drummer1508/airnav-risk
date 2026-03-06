@@ -31,6 +31,7 @@ declare module "express-session" {
     role: string;
     fullName: string;
     username: string;
+    line: number;
   }
 }
 

@@ -11,7 +11,21 @@ export async function seedDatabase() {
       { username: "inputer1", password: await bcrypt.hash("inputer123", 10), fullName: "Budi Santoso", role: "inputer", line: 1, isActive: true },
       { username: "reviewer1", password: await bcrypt.hash("reviewer123", 10), fullName: "Ahmad Fauzi", role: "reviewer", line: 1, isActive: true },
       { username: "approval1", password: await bcrypt.hash("approval123", 10), fullName: "Direktur Operasi", role: "approval", line: 1, isActive: true },
+      { username: "reviewer2", password: await bcrypt.hash("reviewer123", 10), fullName: "Siti Rahayu (L2)", role: "reviewer", line: 2, isActive: true },
+      { username: "approval2", password: await bcrypt.hash("approval123", 10), fullName: "VP Risk Management", role: "approval", line: 2, isActive: true },
     ]);
+  } else {
+    const usernames = existingUsers.map(u => u.username);
+    const l2Users = [];
+    if (!usernames.includes("reviewer2")) {
+      l2Users.push({ username: "reviewer2", password: await bcrypt.hash("reviewer123", 10), fullName: "Siti Rahayu (L2)", role: "reviewer", line: 2, isActive: true });
+    }
+    if (!usernames.includes("approval2")) {
+      l2Users.push({ username: "approval2", password: await bcrypt.hash("approval123", 10), fullName: "VP Risk Management", role: "approval", line: 2, isActive: true });
+    }
+    if (l2Users.length > 0) {
+      await db.insert(users).values(l2Users);
+    }
   }
 
   const existingT1 = await db.select().from(taxonomyT1);

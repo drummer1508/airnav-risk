@@ -100,6 +100,19 @@ export const workflowLogs = pgTable("workflow_logs", {
   timestamp: timestamp("timestamp").defaultNow(),
 });
 
+export const auditTrails = pgTable("audit_trails", {
+  id: serial("id").primaryKey(),
+  tableName: text("table_name").notNull(),
+  recordId: integer("record_id").notNull(),
+  fieldName: text("field_name").notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  changedBy: integer("changed_by").notNull(),
+  changedByName: text("changed_by_name").notNull(),
+  changedByRole: text("changed_by_role").notNull(),
+  changedAt: timestamp("changed_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertOrgUnitSchema = createInsertSchema(orgUnits).omit({ id: true });
 export const insertTaxonomyT1Schema = createInsertSchema(taxonomyT1).omit({ id: true });
@@ -108,6 +121,7 @@ export const insertTaxonomyT3Schema = createInsertSchema(taxonomyT3).omit({ id: 
 export const insertRiskSchema = createInsertSchema(risks).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertMitigationSchema = createInsertSchema(mitigations).omit({ id: true, createdAt: true });
 export const insertWorkflowLogSchema = createInsertSchema(workflowLogs).omit({ id: true, timestamp: true });
+export const insertAuditTrailSchema = createInsertSchema(auditTrails).omit({ id: true, changedAt: true });
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -122,3 +136,5 @@ export type Mitigation = typeof mitigations.$inferSelect;
 export type InsertMitigation = z.infer<typeof insertMitigationSchema>;
 export type WorkflowLog = typeof workflowLogs.$inferSelect;
 export type InsertWorkflowLog = z.infer<typeof insertWorkflowLogSchema>;
+export type AuditTrail = typeof auditTrails.$inferSelect;
+export type InsertAuditTrail = z.infer<typeof insertAuditTrailSchema>;

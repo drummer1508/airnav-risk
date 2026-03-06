@@ -1,8 +1,54 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertRiskSchema, insertMitigationSchema, insertOrgUnitSchema, insertWorkflowLogSchema, insertUserSchema } from "@shared/schema";
+import { insertRiskSchema, insertMitigationSchema, insertOrgUnitSchema, insertWorkflowLogSchema, insertUserSchema, insertAuditTrailSchema } from "@shared/schema";
 import { setupSession, hashPassword, verifyPassword, requireAuth, requireRole } from "./auth";
+
+function getValidTransitions(role: string, line: number): Record<string, string[]> {
+  if (role === "sysadmin") {
+    return {
+      draft: ["submitted"],
+      returned_to_inputer: ["submitted"],
+      submitted: ["reviewed", "returned_to_inputer"],
+      reviewed: ["l1_approved", "returned_to_reviewer"],
+      returned_to_reviewer: ["reviewed"],
+      l1_approved: ["l2_review"],
+      l2_review: ["l2_finalized", "l2_returned"],
+      l2_returned: ["reviewed", "l2_review"],
+    };
+  }
+  if (role === "inputer") {
+    return {
+      draft: ["submitted"],
+      returned_to_inputer: ["submitted"],
+    };
+  }
+  if (role === "reviewer" && line === 1) {
+    return {
+      submitted: ["reviewed", "returned_to_inputer"],
+      l2_returned: ["reviewed"],
+    };
+  }
+  if (role === "reviewer" && line === 2) {
+    return {
+      l1_approved: ["l2_review", "l2_returned", "l2_finalized"],
+      l2_review: ["l2_review", "l2_returned", "l2_finalized"],
+    };
+  }
+  if (role === "approval" && line === 1) {
+    return {
+      reviewed: ["l1_approved", "returned_to_reviewer"],
+    };
+  }
+  if (role === "approval" && line === 2) {
+    return {
+      l2_review: ["l2_finalized", "l2_returned"],
+    };
+  }
+  return {};
+}
+
+const RETURN_STATUSES = ["returned_to_inputer", "returned_to_reviewer", "l2_returned"];
 
 export async function registerRoutes(
   httpServer: Server,
@@ -22,6 +68,7 @@ export async function registerRoutes(
     req.session.role = user.role;
     req.session.fullName = user.fullName;
     req.session.username = user.username;
+    req.session.line = user.line;
     const { password: _, ...safeUser } = user;
     res.json(safeUser);
   });
@@ -216,6 +263,12 @@ export async function registerRoutes(
     const id = parseInt(req.params.id);
     const parsed = insertRiskSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const existing = await storage.getRisk(id);
+    if (!existing) return res.status(404).json({ message: "Not found" });
+    await storage.createAuditTrailsForChanges(
+      "risks", id, existing as any, parsed.data as any,
+      req.session.userId!, req.session.fullName!, req.session.role!
+    );
     const risk = await storage.updateRisk(id, parsed.data);
     if (!risk) return res.status(404).json({ message: "Not found" });
     res.json(risk);
@@ -250,6 +303,13 @@ export async function registerRoutes(
     const id = parseInt(req.params.id);
     const parsed = insertMitigationSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const existing = await storage.getMitigations();
+    const oldMit = existing.find(m => m.id === id);
+    if (!oldMit) return res.status(404).json({ message: "Not found" });
+    await storage.createAuditTrailsForChanges(
+      "mitigations", id, oldMit as any, parsed.data as any,
+      req.session.userId!, req.session.fullName!, req.session.role!
+    );
     const mit = await storage.updateMitigation(id, parsed.data);
     if (!mit) return res.status(404).json({ message: "Not found" });
     res.json(mit);
@@ -268,15 +328,55 @@ export async function registerRoutes(
     res.json(logs);
   });
 
-  app.post("/api/workflow-logs", requireRole("sysadmin", "reviewer", "approval"), async (req, res) => {
+  app.post("/api/workflow-logs", requireRole("sysadmin", "inputer", "reviewer", "approval"), async (req, res) => {
     const parsed = insertWorkflowLogSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const log = await storage.createWorkflowLog(parsed.data);
 
-    if (parsed.data.toStatus) {
-      await storage.updateRisk(parsed.data.riskId, { currentStatus: parsed.data.toStatus });
+    const role = req.session.role!;
+    const line = req.session.line ?? 1;
+    const risk = await storage.getRisk(parsed.data.riskId);
+    if (!risk) return res.status(404).json({ message: "Risiko tidak ditemukan" });
+
+    const fromStatus = risk.currentStatus;
+    const toStatus = parsed.data.toStatus;
+
+    const transitions = getValidTransitions(role, line);
+    const allowed = transitions[fromStatus];
+    if (!allowed || !allowed.includes(toStatus)) {
+      return res.status(403).json({ message: `Transisi ${fromStatus} → ${toStatus} tidak diizinkan untuk role ${role} (L${line})` });
     }
+
+    if (RETURN_STATUSES.includes(toStatus) && !parsed.data.comments?.trim()) {
+      return res.status(400).json({ message: "Komentar wajib diisi untuk pengembalian dokumen" });
+    }
+
+    const logData = {
+      ...parsed.data,
+      fromStatus,
+      actorName: req.session.fullName!,
+      actorRole: role,
+    };
+    const log = await storage.createWorkflowLog(logData);
+
+    await storage.createAuditTrailsForChanges(
+      "risks", parsed.data.riskId, risk as any, { currentStatus: toStatus } as any,
+      req.session.userId!, req.session.fullName!, role
+    );
+    await storage.updateRisk(parsed.data.riskId, { currentStatus: toStatus });
+
     res.status(201).json(log);
+  });
+
+  app.get("/api/audit-trails/:tableName/:recordId", requireAuth, async (req, res) => {
+    const { tableName, recordId } = req.params;
+    const trails = await storage.getAuditTrails(tableName, parseInt(recordId));
+    res.json(trails);
+  });
+
+  app.get("/api/audit-trails/:tableName/:recordId/:fieldName", requireAuth, async (req, res) => {
+    const { tableName, recordId, fieldName } = req.params;
+    const trails = await storage.getFieldAuditTrails(tableName, parseInt(recordId), fieldName);
+    res.json(trails);
   });
 
   app.get("/api/dashboard/stats", requireAuth, async (_req, res) => {
@@ -286,8 +386,12 @@ export async function registerRoutes(
     const orgUnitsList = await storage.getOrgUnits();
 
     const totalRisks = allRisks.length;
-    const draftRisks = allRisks.filter(r => r.currentStatus === "draft").length;
-    const reviewedRisks = allRisks.filter(r => r.currentStatus === "reviewed").length;
+    const draftRisks = allRisks.filter(r => r.currentStatus === "draft" || r.currentStatus === "returned_to_inputer").length;
+    const submittedRisks = allRisks.filter(r => r.currentStatus === "submitted").length;
+    const reviewedRisks = allRisks.filter(r => r.currentStatus === "reviewed" || r.currentStatus === "returned_to_reviewer").length;
+    const l1ApprovedRisks = allRisks.filter(r => r.currentStatus === "l1_approved").length;
+    const l2ReviewRisks = allRisks.filter(r => r.currentStatus === "l2_review" || r.currentStatus === "l2_returned").length;
+    const l2FinalizedRisks = allRisks.filter(r => r.currentStatus === "l2_finalized").length;
     const approvedRisks = allRisks.filter(r => r.currentStatus === "approved").length;
     const validatedRisks = allRisks.filter(r => r.currentStatus === "validated").length;
 
@@ -341,7 +445,11 @@ export async function registerRoutes(
     res.json({
       totalRisks,
       draftRisks,
+      submittedRisks,
       reviewedRisks,
+      l1ApprovedRisks,
+      l2ReviewRisks,
+      l2FinalizedRisks,
       approvedRisks,
       validatedRisks,
       criticalRisks,

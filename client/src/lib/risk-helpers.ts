@@ -8,12 +8,99 @@ export function getRiskLevelInfo(score: number) {
 export function getStatusInfo(status: string) {
   switch (status) {
     case "draft": return { label: "Draft", className: "bg-muted text-muted-foreground" };
-    case "reviewed": return { label: "Reviewed", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" };
+    case "submitted": return { label: "Diajukan", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" };
+    case "returned_to_inputer": return { label: "Dikembalikan ke Inputer", className: "bg-red-500/10 text-red-600 dark:text-red-400" };
+    case "reviewed": return { label: "Direview L1", className: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" };
+    case "returned_to_reviewer": return { label: "Dikembalikan ke Reviewer", className: "bg-orange-500/10 text-orange-600 dark:text-orange-400" };
+    case "l1_approved": return { label: "Disetujui L1", className: "bg-purple-500/10 text-purple-600 dark:text-purple-400" };
+    case "l2_review": return { label: "Review L2", className: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400" };
+    case "l2_returned": return { label: "Dikembalikan L2→L1", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400" };
+    case "l2_finalized": return { label: "Final L2", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" };
     case "approved": return { label: "Approved", className: "bg-purple-500/10 text-purple-600 dark:text-purple-400" };
     case "validated": return { label: "Validated", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" };
     case "sent_back": return { label: "Sent Back", className: "bg-red-500/10 text-red-600 dark:text-red-400" };
     default: return { label: status, className: "bg-muted text-muted-foreground" };
   }
+}
+
+export type WorkflowAction = {
+  toStatus: string;
+  label: string;
+  variant: "default" | "destructive" | "outline";
+  requireComment: boolean;
+};
+
+export function getAvailableWorkflowActions(currentStatus: string, userRole: string, userLine: number): WorkflowAction[] {
+  const actions: WorkflowAction[] = [];
+
+  if (userRole === "sysadmin") {
+    if (currentStatus === "draft" || currentStatus === "returned_to_inputer") {
+      actions.push({ toStatus: "submitted", label: "Submit untuk Review", variant: "default", requireComment: false });
+    }
+    if (currentStatus === "submitted") {
+      actions.push({ toStatus: "reviewed", label: "Approve Review", variant: "default", requireComment: false });
+      actions.push({ toStatus: "returned_to_inputer", label: "Kembalikan ke Inputer", variant: "destructive", requireComment: true });
+    }
+    if (currentStatus === "reviewed") {
+      actions.push({ toStatus: "l1_approved", label: "Approve L1", variant: "default", requireComment: false });
+      actions.push({ toStatus: "returned_to_reviewer", label: "Kembalikan ke Reviewer", variant: "destructive", requireComment: true });
+    }
+    if (currentStatus === "l1_approved") {
+      actions.push({ toStatus: "l2_review", label: "Mulai Review L2", variant: "default", requireComment: false });
+    }
+    if (currentStatus === "l2_review") {
+      actions.push({ toStatus: "l2_finalized", label: "Finalize L2", variant: "default", requireComment: false });
+      actions.push({ toStatus: "l2_returned", label: "Kembalikan ke L1", variant: "destructive", requireComment: true });
+    }
+    if (currentStatus === "l2_returned") {
+      actions.push({ toStatus: "reviewed", label: "Kembalikan ke L1 Review", variant: "outline", requireComment: true });
+      actions.push({ toStatus: "l2_review", label: "Lanjut Review L2", variant: "default", requireComment: false });
+    }
+    if (currentStatus === "returned_to_reviewer") {
+      actions.push({ toStatus: "reviewed", label: "Ajukan Ulang ke GM", variant: "default", requireComment: false });
+    }
+    return actions;
+  }
+
+  if (userRole === "inputer") {
+    if (currentStatus === "draft" || currentStatus === "returned_to_inputer") {
+      actions.push({ toStatus: "submitted", label: "Submit untuk Review", variant: "default", requireComment: false });
+    }
+  }
+
+  if (userRole === "reviewer" && userLine === 1) {
+    if (currentStatus === "submitted") {
+      actions.push({ toStatus: "reviewed", label: "Approve & Teruskan ke GM", variant: "default", requireComment: false });
+      actions.push({ toStatus: "returned_to_inputer", label: "Kembalikan ke Inputer", variant: "destructive", requireComment: true });
+    }
+    if (currentStatus === "l2_returned") {
+      actions.push({ toStatus: "reviewed", label: "Perbaiki & Ajukan Ulang", variant: "default", requireComment: true });
+    }
+  }
+
+  if (userRole === "approval" && userLine === 1) {
+    if (currentStatus === "reviewed") {
+      actions.push({ toStatus: "l1_approved", label: "Approve L1", variant: "default", requireComment: false });
+      actions.push({ toStatus: "returned_to_reviewer", label: "Kembalikan ke Reviewer", variant: "destructive", requireComment: true });
+    }
+  }
+
+  if (userRole === "reviewer" && userLine === 2) {
+    if (currentStatus === "l1_approved" || currentStatus === "l2_review") {
+      actions.push({ toStatus: "l2_review", label: "Koreksi Penilaian", variant: "outline", requireComment: true });
+      actions.push({ toStatus: "l2_returned", label: "Kembalikan ke L1", variant: "destructive", requireComment: true });
+      actions.push({ toStatus: "l2_finalized", label: "Finalize", variant: "default", requireComment: false });
+    }
+  }
+
+  if (userRole === "approval" && userLine === 2) {
+    if (currentStatus === "l2_review") {
+      actions.push({ toStatus: "l2_finalized", label: "Finalize L2", variant: "default", requireComment: false });
+      actions.push({ toStatus: "l2_returned", label: "Kembalikan ke L1", variant: "destructive", requireComment: true });
+    }
+  }
+
+  return actions;
 }
 
 export function getMitigationStatusInfo(status: string) {
