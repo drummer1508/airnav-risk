@@ -24,6 +24,8 @@ function getOrgUnitDescendants(orgUnitId: number, allUnits: OrgUnitRow[]): numbe
 async function getUserVisibleOrgIds(req: any): Promise<number[] | null> {
   const role = req.session.role;
   if (role === "sysadmin") return null;
+  const line = req.session.line ?? 1;
+  if (line >= 2) return null;
   const orgUnitId = req.session.orgUnitId;
   if (!orgUnitId) return null;
   const allUnits = await storage.getOrgUnits();
@@ -41,6 +43,9 @@ function getValidTransitions(role: string, line: number): Record<string, string[
       l1_approved: ["l2_review"],
       l2_review: ["l2_finalized", "l2_returned"],
       l2_returned: ["reviewed", "l2_review"],
+      l2_finalized: ["l3_review"],
+      l3_review: ["l3_finalized", "l3_returned"],
+      l3_returned: ["l2_review", "l2_finalized"],
     };
   }
   if (role === "inputer") {
@@ -59,6 +64,7 @@ function getValidTransitions(role: string, line: number): Record<string, string[
     return {
       l1_approved: ["l2_review", "l2_returned", "l2_finalized"],
       l2_review: ["l2_review", "l2_returned", "l2_finalized"],
+      l3_returned: ["l2_review", "l2_finalized"],
     };
   }
   if (role === "approval" && line === 1) {
@@ -71,10 +77,21 @@ function getValidTransitions(role: string, line: number): Record<string, string[
       l2_review: ["l2_finalized", "l2_returned"],
     };
   }
+  if (role === "reviewer" && line === 3) {
+    return {
+      l2_finalized: ["l3_review", "l3_returned", "l3_finalized"],
+      l3_review: ["l3_review", "l3_returned", "l3_finalized"],
+    };
+  }
+  if (role === "approval" && line === 3) {
+    return {
+      l3_review: ["l3_finalized", "l3_returned"],
+    };
+  }
   return {};
 }
 
-const RETURN_STATUSES = ["returned_to_inputer", "returned_to_reviewer", "l2_returned"];
+const RETURN_STATUSES = ["returned_to_inputer", "returned_to_reviewer", "l2_returned", "l3_returned"];
 
 export async function registerRoutes(
   httpServer: Server,
@@ -498,6 +515,8 @@ export async function registerRoutes(
     const l1ApprovedRisks = allRisks.filter(r => r.currentStatus === "l1_approved").length;
     const l2ReviewRisks = allRisks.filter(r => r.currentStatus === "l2_review" || r.currentStatus === "l2_returned").length;
     const l2FinalizedRisks = allRisks.filter(r => r.currentStatus === "l2_finalized").length;
+    const l3ReviewRisks = allRisks.filter(r => r.currentStatus === "l3_review" || r.currentStatus === "l3_returned").length;
+    const l3FinalizedRisks = allRisks.filter(r => r.currentStatus === "l3_finalized").length;
     const approvedRisks = allRisks.filter(r => r.currentStatus === "approved").length;
     const validatedRisks = allRisks.filter(r => r.currentStatus === "validated").length;
 
@@ -556,6 +575,8 @@ export async function registerRoutes(
       l1ApprovedRisks,
       l2ReviewRisks,
       l2FinalizedRisks,
+      l3ReviewRisks,
+      l3FinalizedRisks,
       approvedRisks,
       validatedRisks,
       criticalRisks,

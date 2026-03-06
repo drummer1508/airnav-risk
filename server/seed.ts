@@ -49,6 +49,57 @@ export async function seedDatabase() {
       }
     }
 
+    const corpPlanning = allOrgs.find(o => o.name === "Corporate Planning");
+    if (corpPlanning && !allOrgs.find(o => o.name === "Sub Divisi Risiko")) {
+      const subRisiko = await db.insert(orgUnits).values([
+        { name: "Sub Divisi Risiko", parentId: corpPlanning.id, type: "sub_division", level: "head_office" },
+      ]).returning();
+      if (!usernames.includes("reviewer_risiko")) {
+        newUsers.push({ username: "reviewer_risiko", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Sub Divisi Risiko", role: "reviewer", line: 2, orgUnitId: subRisiko[0].id, isActive: true });
+      }
+      if (!usernames.includes("inputer_risiko")) {
+        newUsers.push({ username: "inputer_risiko", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Risiko", role: "inputer", line: 1, orgUnitId: subRisiko[0].id, isActive: true });
+      }
+    }
+
+    const internalAudit = allOrgs.find(o => o.name === "Internal Audit");
+    if (internalAudit) {
+      if (!usernames.includes("reviewer_audit")) {
+        newUsers.push({ username: "reviewer_audit", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Internal Audit", role: "reviewer", line: 3, orgUnitId: internalAudit.id, isActive: true });
+      }
+      if (!usernames.includes("inputer_audit")) {
+        newUsers.push({ username: "inputer_audit", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Auditor", role: "inputer", line: 1, orgUnitId: internalAudit.id, isActive: true });
+      }
+    }
+
+    const dirOps = allOrgs.find(o => o.name === "Direktorat Operasi");
+    const divAtc = allOrgs.find(o => o.name === "Divisi Operasi ATC");
+    if (dirOps && divAtc) {
+      if (!usernames.includes("inputer_atc")) {
+        newUsers.push({ username: "inputer_atc", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Operasi ATC", role: "inputer", line: 1, orgUnitId: divAtc.id, isActive: true });
+      }
+      if (!usernames.includes("reviewer_atc")) {
+        newUsers.push({ username: "reviewer_atc", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Divisi Operasi ATC", role: "reviewer", line: 1, orgUnitId: divAtc.id, isActive: true });
+      }
+      if (!usernames.includes("approval_dir_ops")) {
+        newUsers.push({ username: "approval_dir_ops", password: await bcrypt.hash("approval123", 10), fullName: "Direktur Operasi", role: "approval", line: 1, orgUnitId: dirOps.id, isActive: true });
+      }
+    }
+
+    const dirKeu = allOrgs.find(o => o.name === "Direktorat Keuangan");
+    const divKeu = allOrgs.find(o => o.name === "Divisi Keuangan");
+    if (dirKeu && divKeu) {
+      if (!usernames.includes("inputer_keu")) {
+        newUsers.push({ username: "inputer_keu", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Divisi Keuangan", role: "inputer", line: 1, orgUnitId: divKeu.id, isActive: true });
+      }
+      if (!usernames.includes("reviewer_keu")) {
+        newUsers.push({ username: "reviewer_keu", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Divisi Keuangan", role: "reviewer", line: 1, orgUnitId: divKeu.id, isActive: true });
+      }
+      if (!usernames.includes("approval_dir_keu")) {
+        newUsers.push({ username: "approval_dir_keu", password: await bcrypt.hash("approval123", 10), fullName: "Direktur Keuangan", role: "approval", line: 1, orgUnitId: dirKeu.id, isActive: true });
+      }
+    }
+
     if (newUsers.length > 0) {
       await db.insert(users).values(newUsers);
     }
@@ -115,7 +166,7 @@ export async function seedDatabase() {
     { name: "Internal Audit", parentId: headOffice[0].id, type: "function", level: "head_office" },
   ]).returning();
 
-  await db.insert(orgUnits).values([
+  const divisions = await db.insert(orgUnits).values([
     { name: "Divisi Operasi ATC", parentId: direktorats[0].id, type: "division", level: "head_office" },
     { name: "Divisi Perencanaan Operasi", parentId: direktorats[0].id, type: "division", level: "head_office" },
     { name: "Divisi Teknik Navigasi", parentId: direktorats[1].id, type: "division", level: "head_office" },
@@ -126,6 +177,23 @@ export async function seedDatabase() {
     { name: "Divisi Umum", parentId: direktorats[3].id, type: "division", level: "head_office" },
     { name: "Divisi Safety Management", parentId: direktorats[4].id, type: "division", level: "head_office" },
     { name: "Divisi Quality Assurance", parentId: direktorats[4].id, type: "division", level: "head_office" },
+  ]).returning();
+
+  const subDivRisiko = await db.insert(orgUnits).values([
+    { name: "Sub Divisi Risiko", parentId: direktorats[6].id, type: "sub_division", level: "head_office" },
+  ]).returning();
+
+  await db.insert(users).values([
+    { username: "inputer_atc", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Operasi ATC", role: "inputer", line: 1, orgUnitId: divisions[0].id, isActive: true },
+    { username: "reviewer_atc", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Divisi Operasi ATC", role: "reviewer", line: 1, orgUnitId: divisions[0].id, isActive: true },
+    { username: "approval_dir_ops", password: await bcrypt.hash("approval123", 10), fullName: "Direktur Operasi", role: "approval", line: 1, orgUnitId: direktorats[0].id, isActive: true },
+    { username: "inputer_keu", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Divisi Keuangan", role: "inputer", line: 1, orgUnitId: divisions[4].id, isActive: true },
+    { username: "reviewer_keu", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Divisi Keuangan", role: "reviewer", line: 1, orgUnitId: divisions[4].id, isActive: true },
+    { username: "approval_dir_keu", password: await bcrypt.hash("approval123", 10), fullName: "Direktur Keuangan", role: "approval", line: 1, orgUnitId: direktorats[2].id, isActive: true },
+    { username: "reviewer_risiko", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Sub Divisi Risiko", role: "reviewer", line: 2, orgUnitId: subDivRisiko[0].id, isActive: true },
+    { username: "inputer_risiko", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Risiko", role: "inputer", line: 1, orgUnitId: subDivRisiko[0].id, isActive: true },
+    { username: "reviewer_audit", password: await bcrypt.hash("reviewer123", 10), fullName: "Kepala Internal Audit", role: "reviewer", line: 3, orgUnitId: direktorats[7].id, isActive: true },
+    { username: "inputer_audit", password: await bcrypt.hash("inputer123", 10), fullName: "Staf Auditor", role: "inputer", line: 1, orgUnitId: direktorats[7].id, isActive: true },
   ]);
 
   const branches = await db.insert(orgUnits).values([

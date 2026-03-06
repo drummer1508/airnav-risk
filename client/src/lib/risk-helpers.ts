@@ -16,6 +16,9 @@ export function getStatusInfo(status: string) {
     case "l2_review": return { label: "Review L2", className: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400" };
     case "l2_returned": return { label: "Dikembalikan L2→L1", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400" };
     case "l2_finalized": return { label: "Final L2", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" };
+    case "l3_review": return { label: "Review L3 (Audit)", className: "bg-violet-500/10 text-violet-600 dark:text-violet-400" };
+    case "l3_returned": return { label: "Dikembalikan L3→L2", className: "bg-rose-500/10 text-rose-600 dark:text-rose-400" };
+    case "l3_finalized": return { label: "Final L3 (Audit)", className: "bg-teal-500/10 text-teal-600 dark:text-teal-400" };
     case "approved": return { label: "Approved", className: "bg-purple-500/10 text-purple-600 dark:text-purple-400" };
     case "validated": return { label: "Validated", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" };
     case "sent_back": return { label: "Sent Back", className: "bg-red-500/10 text-red-600 dark:text-red-400" };
@@ -59,6 +62,17 @@ export function getAvailableWorkflowActions(currentStatus: string, userRole: str
     if (currentStatus === "returned_to_reviewer") {
       actions.push({ toStatus: "reviewed", label: "Ajukan Ulang ke GM", variant: "default", requireComment: false });
     }
+    if (currentStatus === "l2_finalized") {
+      actions.push({ toStatus: "l3_review", label: "Mulai Review L3 (Audit)", variant: "default", requireComment: false });
+    }
+    if (currentStatus === "l3_review") {
+      actions.push({ toStatus: "l3_finalized", label: "Finalize L3 (Audit)", variant: "default", requireComment: false });
+      actions.push({ toStatus: "l3_returned", label: "Kembalikan ke L2", variant: "destructive", requireComment: true });
+    }
+    if (currentStatus === "l3_returned") {
+      actions.push({ toStatus: "l2_review", label: "Kembali ke Review L2", variant: "outline", requireComment: true });
+      actions.push({ toStatus: "l2_finalized", label: "Finalize L2 Ulang", variant: "default", requireComment: false });
+    }
     return actions;
   }
 
@@ -91,12 +105,31 @@ export function getAvailableWorkflowActions(currentStatus: string, userRole: str
       actions.push({ toStatus: "l2_returned", label: "Kembalikan ke L1", variant: "destructive", requireComment: true });
       actions.push({ toStatus: "l2_finalized", label: "Finalize", variant: "default", requireComment: false });
     }
+    if (currentStatus === "l3_returned") {
+      actions.push({ toStatus: "l2_review", label: "Perbaiki & Review Ulang", variant: "outline", requireComment: true });
+      actions.push({ toStatus: "l2_finalized", label: "Finalize L2 Ulang", variant: "default", requireComment: false });
+    }
   }
 
   if (userRole === "approval" && userLine === 2) {
     if (currentStatus === "l2_review") {
       actions.push({ toStatus: "l2_finalized", label: "Finalize L2", variant: "default", requireComment: false });
       actions.push({ toStatus: "l2_returned", label: "Kembalikan ke L1", variant: "destructive", requireComment: true });
+    }
+  }
+
+  if (userRole === "reviewer" && userLine === 3) {
+    if (currentStatus === "l2_finalized" || currentStatus === "l3_review") {
+      actions.push({ toStatus: "l3_review", label: "Koreksi Audit", variant: "outline", requireComment: true });
+      actions.push({ toStatus: "l3_returned", label: "Kembalikan ke L2", variant: "destructive", requireComment: true });
+      actions.push({ toStatus: "l3_finalized", label: "Finalize Audit", variant: "default", requireComment: false });
+    }
+  }
+
+  if (userRole === "approval" && userLine === 3) {
+    if (currentStatus === "l3_review") {
+      actions.push({ toStatus: "l3_finalized", label: "Finalize L3 (Audit)", variant: "default", requireComment: false });
+      actions.push({ toStatus: "l3_returned", label: "Kembalikan ke L2", variant: "destructive", requireComment: true });
     }
   }
 

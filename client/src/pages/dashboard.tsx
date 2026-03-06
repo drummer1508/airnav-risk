@@ -26,6 +26,8 @@ interface DashboardStats {
   l1ApprovedRisks: number;
   l2ReviewRisks: number;
   l2FinalizedRisks: number;
+  l3ReviewRisks: number;
+  l3FinalizedRisks: number;
   approvedRisks: number;
   validatedRisks: number;
   criticalRisks: number;
@@ -169,7 +171,7 @@ export default function Dashboard() {
         <StatCard title="Total Risiko" value={stats.totalRisks} icon={AlertTriangle} description={`${stats.criticalRisks} sangat tinggi, ${stats.highRisks} tinggi`} iconColor="text-primary" />
         <StatCard title="Risiko Sangat Tinggi" value={stats.criticalRisks} icon={AlertOctagon} description="Skor 16-25, perlu tindakan segera" iconColor="text-red-500 dark:text-red-400" />
         <StatCard title="Mitigasi Aktif" value={stats.activeMitigations} icon={Activity} description={`${stats.completedMitigations} selesai dari ${stats.totalMitigations}`} iconColor="text-amber-500 dark:text-amber-400" />
-        <StatCard title="Final L2" value={stats.l2FinalizedRisks} icon={ShieldCheck} description="Risiko telah difinalisasi Lini 2" iconColor="text-emerald-500 dark:text-emerald-400" />
+        <StatCard title="Final L3 (Audit)" value={stats.l3FinalizedRisks} icon={ShieldCheck} description="Risiko telah difinalisasi Audit Internal" iconColor="text-emerald-500 dark:text-emerald-400" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -235,7 +237,7 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
                 <div className="text-center p-2 rounded-md bg-muted/50">
                   <div className="text-lg font-bold">{stats.draftRisks}</div>
                   <div className="text-[10px] text-muted-foreground mt-0.5">Draft</div>
@@ -259,6 +261,14 @@ export default function Dashboard() {
                 <div className="text-center p-2 rounded-md bg-emerald-500/5">
                   <div className="text-lg font-bold text-emerald-500 dark:text-emerald-400">{stats.l2FinalizedRisks}</div>
                   <div className="text-[10px] text-muted-foreground mt-0.5">Final L2</div>
+                </div>
+                <div className="text-center p-2 rounded-md bg-violet-500/5">
+                  <div className="text-lg font-bold text-violet-500 dark:text-violet-400">{stats.l3ReviewRisks}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Review L3</div>
+                </div>
+                <div className="text-center p-2 rounded-md bg-teal-500/5">
+                  <div className="text-lg font-bold text-teal-500 dark:text-teal-400">{stats.l3FinalizedRisks}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Final L3</div>
                 </div>
               </div>
             </CardContent>

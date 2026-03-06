@@ -121,7 +121,7 @@ export const insertTaxonomyT2Schema = createInsertSchema(taxonomyT2).omit({ id: 
 export const insertTaxonomyT3Schema = createInsertSchema(taxonomyT3).omit({ id: true });
 export const insertRiskSchema = createInsertSchema(risks).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertMitigationSchema = createInsertSchema(mitigations).omit({ id: true, createdAt: true });
-export const insertWorkflowLogSchema = createInsertSchema(workflowLogs).omit({ id: true, timestamp: true });
+export const insertWorkflowLogSchema = createInsertSchema(workflowLogs).omit({ id: true, timestamp: true, fromStatus: true, actorName: true, actorRole: true });
 export const insertAuditTrailSchema = createInsertSchema(auditTrails).omit({ id: true, changedAt: true });
 
 export type User = typeof users.$inferSelect;
