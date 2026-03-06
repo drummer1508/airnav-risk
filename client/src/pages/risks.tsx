@@ -33,7 +33,6 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
     rootCause: risk?.rootCause || "",
     consequence: risk?.consequence || "",
     orgUnitId: risk?.orgUnitId?.toString() || (userOrgUnitId ? userOrgUnitId.toString() : ""),
-    riskOwner: risk?.riskOwner || "",
     t1Id: risk?.t1Id?.toString() || "",
     t2Id: risk?.t2Id?.toString() || "",
     t3Id: risk?.t3Id?.toString() || "",
@@ -74,7 +73,7 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
       rootCause: form.rootCause || null,
       consequence: form.consequence || null,
       orgUnitId: form.orgUnitId ? parseInt(form.orgUnitId) : null,
-      riskOwner: form.riskOwner || null,
+      riskOwner: form.orgUnitId ? (orgUnits.find(u => u.id === parseInt(form.orgUnitId))?.name || null) : null,
       t1Id: form.t1Id ? parseInt(form.t1Id) : null,
       t2Id: form.t2Id ? parseInt(form.t2Id) : null,
       t3Id: form.t3Id ? parseInt(form.t3Id) : null,
@@ -142,7 +141,7 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
             </div>
             <div className="space-y-2">
               <Label>Risk Owner</Label>
-              <Input value={form.riskOwner} onChange={(e) => setForm({ ...form, riskOwner: e.target.value })} data-testid="input-risk-owner" />
+              <Input value={form.orgUnitId ? (orgUnits.find(u => u.id === parseInt(form.orgUnitId))?.name || "") : ""} disabled className="bg-muted" data-testid="input-risk-owner" />
             </div>
           </div>
           <div className="space-y-2">
