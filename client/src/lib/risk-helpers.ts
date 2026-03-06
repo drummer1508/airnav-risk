@@ -37,42 +37,6 @@ export function getAvailableWorkflowActions(currentStatus: string, userRole: str
   const actions: WorkflowAction[] = [];
 
   if (userRole === "sysadmin") {
-    if (currentStatus === "draft" || currentStatus === "returned_to_inputer") {
-      actions.push({ toStatus: "submitted", label: "Submit untuk Review", variant: "default", requireComment: false });
-    }
-    if (currentStatus === "submitted") {
-      actions.push({ toStatus: "reviewed", label: "Approve Review", variant: "default", requireComment: false });
-      actions.push({ toStatus: "returned_to_inputer", label: "Kembalikan ke Inputer", variant: "destructive", requireComment: true });
-    }
-    if (currentStatus === "reviewed") {
-      actions.push({ toStatus: "l1_approved", label: "Approve L1", variant: "default", requireComment: false });
-      actions.push({ toStatus: "returned_to_reviewer", label: "Kembalikan ke Reviewer", variant: "destructive", requireComment: true });
-    }
-    if (currentStatus === "l1_approved") {
-      actions.push({ toStatus: "l2_review", label: "Mulai Review L2", variant: "default", requireComment: false });
-    }
-    if (currentStatus === "l2_review") {
-      actions.push({ toStatus: "l2_finalized", label: "Finalize L2", variant: "default", requireComment: false });
-      actions.push({ toStatus: "l2_returned", label: "Kembalikan ke L1", variant: "destructive", requireComment: true });
-    }
-    if (currentStatus === "l2_returned") {
-      actions.push({ toStatus: "reviewed", label: "Kembalikan ke L1 Review", variant: "outline", requireComment: true });
-      actions.push({ toStatus: "l2_review", label: "Lanjut Review L2", variant: "default", requireComment: false });
-    }
-    if (currentStatus === "returned_to_reviewer") {
-      actions.push({ toStatus: "reviewed", label: "Ajukan Ulang ke GM", variant: "default", requireComment: false });
-    }
-    if (currentStatus === "l2_finalized") {
-      actions.push({ toStatus: "l3_review", label: "Mulai Review L3 (Audit)", variant: "default", requireComment: false });
-    }
-    if (currentStatus === "l3_review") {
-      actions.push({ toStatus: "l3_finalized", label: "Finalize L3 (Audit)", variant: "default", requireComment: false });
-      actions.push({ toStatus: "l3_returned", label: "Kembalikan ke L2", variant: "destructive", requireComment: true });
-    }
-    if (currentStatus === "l3_returned") {
-      actions.push({ toStatus: "l2_review", label: "Kembali ke Review L2", variant: "outline", requireComment: true });
-      actions.push({ toStatus: "l2_finalized", label: "Finalize L2 Ulang", variant: "default", requireComment: false });
-    }
     return actions;
   }
 

@@ -49,6 +49,7 @@ A comprehensive Enterprise Risk Management (ERM) system for AirNav Indonesia, bu
 
 ## Authentication & RBAC
 - Session-based auth with express-session + connect-pg-simple
+- **Sysadmin**: Can only manage users, roles, and master data (taxonomy, org units). Cannot create/edit/delete risks, mitigations, or perform workflow transitions. Can view all data read-only.
 - Default users:
   - sysadmin/admin123 (line 0, full access)
   - inputer1/inputer123 (line 1, create/edit/delete risks+mitigations)

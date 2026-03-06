@@ -78,9 +78,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isReviewer: role === "reviewer",
     isApproval: role === "approval",
     canManageMaster: role === "sysadmin",
-    canCreateRisk: role === "sysadmin" || role === "inputer",
-    canReviewRisk: role === "sysadmin" || role === "reviewer",
-    canApproveRisk: role === "sysadmin" || role === "approval",
+    canCreateRisk: role === "inputer",
+    canReviewRisk: role === "reviewer",
+    canApproveRisk: role === "approval",
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

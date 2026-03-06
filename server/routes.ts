@@ -34,19 +34,7 @@ async function getUserVisibleOrgIds(req: any): Promise<number[] | null> {
 
 function getValidTransitions(role: string, line: number): Record<string, string[]> {
   if (role === "sysadmin") {
-    return {
-      draft: ["submitted"],
-      returned_to_inputer: ["submitted"],
-      submitted: ["reviewed", "returned_to_inputer"],
-      reviewed: ["l1_approved", "returned_to_reviewer"],
-      returned_to_reviewer: ["reviewed"],
-      l1_approved: ["l2_review"],
-      l2_review: ["l2_finalized", "l2_returned"],
-      l2_returned: ["reviewed", "l2_review"],
-      l2_finalized: ["l3_review"],
-      l3_review: ["l3_finalized", "l3_returned"],
-      l3_returned: ["l2_review", "l2_finalized"],
-    };
+    return {};
   }
   if (role === "inputer") {
     return {
@@ -305,7 +293,7 @@ export async function registerRoutes(
     res.json(risk);
   });
 
-  app.post("/api/risks", requireRole("sysadmin", "inputer"), async (req, res) => {
+  app.post("/api/risks", requireRole("inputer"), async (req, res) => {
     const parsed = insertRiskSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const visibleOrgIds = await getUserVisibleOrgIds(req);
@@ -317,7 +305,7 @@ export async function registerRoutes(
     res.status(201).json(risk);
   });
 
-  app.patch("/api/risks/:id", requireRole("sysadmin", "inputer", "reviewer", "approval"), async (req, res) => {
+  app.patch("/api/risks/:id", requireRole("inputer", "reviewer", "approval"), async (req, res) => {
     const id = parseInt(req.params.id);
     const parsed = insertRiskSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
@@ -343,7 +331,7 @@ export async function registerRoutes(
     res.json(risk);
   });
 
-  app.delete("/api/risks/:id", requireRole("sysadmin", "inputer"), async (req, res) => {
+  app.delete("/api/risks/:id", requireRole("inputer"), async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await storage.getRisk(id);
     if (!existing) return res.status(404).json({ message: "Not found" });
@@ -380,7 +368,7 @@ export async function registerRoutes(
     res.json(mits);
   });
 
-  app.post("/api/mitigations", requireRole("sysadmin", "inputer"), async (req, res) => {
+  app.post("/api/mitigations", requireRole("inputer"), async (req, res) => {
     const parsed = insertMitigationSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const visibleOrgIds = await getUserVisibleOrgIds(req);
@@ -394,7 +382,7 @@ export async function registerRoutes(
     res.status(201).json(mit);
   });
 
-  app.patch("/api/mitigations/:id", requireRole("sysadmin", "inputer"), async (req, res) => {
+  app.patch("/api/mitigations/:id", requireRole("inputer"), async (req, res) => {
     const id = parseInt(req.params.id);
     const parsed = insertMitigationSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
@@ -417,7 +405,7 @@ export async function registerRoutes(
     res.json(mit);
   });
 
-  app.delete("/api/mitigations/:id", requireRole("sysadmin", "inputer"), async (req, res) => {
+  app.delete("/api/mitigations/:id", requireRole("inputer"), async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await storage.getMitigations();
     const oldMit = existing.find(m => m.id === id);
@@ -440,7 +428,7 @@ export async function registerRoutes(
     res.json(logs);
   });
 
-  app.post("/api/workflow-logs", requireRole("sysadmin", "inputer", "reviewer", "approval"), async (req, res) => {
+  app.post("/api/workflow-logs", requireRole("inputer", "reviewer", "approval"), async (req, res) => {
     const parsed = insertWorkflowLogSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
 
