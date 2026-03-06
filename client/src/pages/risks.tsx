@@ -24,13 +24,15 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
   risk?: Risk; orgUnits: OrgUnit[]; t1s: TaxonomyT1[]; t2s: TaxonomyT2[]; t3s: TaxonomyT3[];
   onSave: (data: any) => void; onCancel: () => void; isPending: boolean;
 }) {
+  const { user } = useAuth();
+  const userOrgUnitId = user?.orgUnitId;
   const [form, setForm] = useState({
     riskCode: risk?.riskCode || "",
     title: risk?.title || "",
     description: risk?.description || "",
     rootCause: risk?.rootCause || "",
     consequence: risk?.consequence || "",
-    orgUnitId: risk?.orgUnitId?.toString() || "",
+    orgUnitId: risk?.orgUnitId?.toString() || (userOrgUnitId ? userOrgUnitId.toString() : ""),
     riskOwner: risk?.riskOwner || "",
     t1Id: risk?.t1Id?.toString() || "",
     t2Id: risk?.t2Id?.toString() || "",
@@ -125,14 +127,18 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Unit Kerja</Label>
-              <Select value={form.orgUnitId} onValueChange={(v) => setForm({ ...form, orgUnitId: v })}>
-                <SelectTrigger data-testid="select-org-unit"><SelectValue placeholder="Pilih unit kerja" /></SelectTrigger>
-                <SelectContent>
-                  {orgUnits.filter(u => u.type !== "head_office").map(u => (
-                    <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {userOrgUnitId && !risk ? (
+                <Input value={orgUnits.find(u => u.id === userOrgUnitId)?.name || ""} disabled className="bg-muted" data-testid="input-org-unit-auto" />
+              ) : (
+                <Select value={form.orgUnitId} onValueChange={(v) => setForm({ ...form, orgUnitId: v })}>
+                  <SelectTrigger data-testid="select-org-unit"><SelectValue placeholder="Pilih unit kerja" /></SelectTrigger>
+                  <SelectContent>
+                    {orgUnits.filter(u => u.type !== "head_office").map(u => (
+                      <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Risk Owner</Label>
