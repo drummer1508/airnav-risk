@@ -38,9 +38,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <img src={logoImg} alt="AirNav ERM Logo" className="h-24 w-auto mb-2" data-testid="img-logo" />
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-login-title">AirNav ERM</h1>
-          <p className="text-sm text-muted-foreground mt-1">Enterprise Risk Management System</p>
+          <img src={logoImg} alt="AirNav ERM Logo" className="h-24 w-auto" data-testid="img-logo" />
         </div>
 
         <Card>
@@ -100,7 +98,7 @@ export default function LoginPage() {
 
         <div className="mt-6 text-center text-xs text-muted-foreground space-y-1">
           <p>Hubungi System Administrator untuk mendapatkan akun</p>
-          <p className="text-[10px] opacity-60">AirNav Indonesia - PT LPPNPI</p>
+          <p className="text-[10px] opacity-60">AirNav Indonesia - Risk Management Division</p>
         </div>
       </div>
     </div>
