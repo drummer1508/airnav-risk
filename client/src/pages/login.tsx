@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { Shield, LogIn, Eye, EyeOff } from "lucide-react";
+import { LogIn, Eye, EyeOff } from "lucide-react";
+import logoImg from "@assets/logo-rnavrisk_1773195318168.png";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -37,9 +38,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary mb-4">
-            <Shield className="h-8 w-8 text-primary-foreground" />
-          </div>
+          <img src={logoImg} alt="AirNav ERM Logo" className="h-24 w-auto mb-2" data-testid="img-logo" />
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-login-title">AirNav ERM</h1>
           <p className="text-sm text-muted-foreground mt-1">Enterprise Risk Management System</p>
         </div>
