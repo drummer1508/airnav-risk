@@ -86,7 +86,9 @@ export const mitigations = pgTable("mitigations", {
   estimatedCost: numeric("estimated_cost"),
   progress: integer("progress").notNull().default(0),
   status: text("status").notNull().default("planned"),
+  workflowStatus: text("workflow_status").notNull().default("draft"),
   evidence: text("evidence"),
+  createdBy: integer("created_by"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

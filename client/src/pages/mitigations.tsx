@@ -14,9 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import type { Mitigation, Risk } from "@shared/schema";
-import { getMitigationStatusInfo, getStrategyInfo, formatCurrency } from "@/lib/risk-helpers";
+import { getMitigationStatusInfo, getMitigationWorkflowInfo, getAvailableMitigationActions, getStrategyInfo, formatCurrency } from "@/lib/risk-helpers";
 import { useAuth } from "@/lib/auth";
-import { Plus, Search, Shield, Pencil, Trash2, Filter, Calendar } from "lucide-react";
+import { Plus, Search, Shield, Pencil, Trash2, Filter, Calendar, Send, CheckCircle, RotateCcw } from "lucide-react";
 
 function MitigationForm({ mitigation, risks, onSave, onCancel, isPending }: {
   mitigation?: Mitigation; risks: Risk[]; onSave: (data: any) => void; onCancel: () => void; isPending: boolean;
@@ -113,13 +113,77 @@ function MitigationForm({ mitigation, risks, onSave, onCancel, isPending }: {
   );
 }
 
+function WorkflowPanel({ mit, onDone }: { mit: Mitigation; onDone: () => void }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [comment, setComment] = useState("");
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+
+  const isOwner = !mit.createdBy || mit.createdBy === user?.id;
+  const actions = user ? getAvailableMitigationActions(mit.workflowStatus || "draft", user.role, isOwner) : [];
+
+  const workflowMut = useMutation({
+    mutationFn: ({ toStatus }: { toStatus: string }) =>
+      apiRequest("PATCH", `/api/mitigations/${mit.id}`, { workflowStatus: toStatus }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/mitigations"] });
+      setPendingAction(null);
+      setComment("");
+      toast({ title: "Status mitigasi berhasil diubah" });
+      onDone();
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  if (actions.length === 0) return null;
+
+  return (
+    <div className="border rounded-lg p-3 bg-muted/20 space-y-2 mt-2">
+      <p className="text-xs font-semibold flex items-center gap-1"><Send className="h-3 w-3" />Aksi Workflow</p>
+      {pendingAction ? (
+        <div className="space-y-2">
+          <Textarea
+            placeholder={pendingAction === "returned" ? "Alasan pengembalian (wajib)" : "Komentar (opsional)"}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            className="text-sm min-h-[56px]"
+            data-testid="textarea-mit-workflow-comment"
+          />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => workflowMut.mutate({ toStatus: pendingAction })}
+              disabled={workflowMut.isPending || (pendingAction === "returned" && !comment.trim())}
+              data-testid="button-confirm-mit-workflow">
+              {workflowMut.isPending ? "Memproses..." : "Konfirmasi"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => { setPendingAction(null); setComment(""); }}>Batal</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {actions.map(action => (
+            <Button key={action.toStatus} size="sm" variant={action.variant}
+              onClick={() => setPendingAction(action.toStatus)}
+              data-testid={`button-mit-action-${action.toStatus}`}>
+              {action.toStatus === "submitted" && <Send className="h-3 w-3 mr-1" />}
+              {action.toStatus === "approved" && <CheckCircle className="h-3 w-3 mr-1" />}
+              {action.toStatus === "returned" && <RotateCcw className="h-3 w-3 mr-1" />}
+              {action.label}
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MitigationsPage() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [wfFilter, setWfFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Mitigation | undefined>();
+  const [workflowMit, setWorkflowMit] = useState<Mitigation | undefined>();
   const { toast } = useToast();
-  const { canCreateRisk } = useAuth();
+  const { canCreateRisk, user, isInputer, isSysadmin } = useAuth();
 
   const { data: allMitigations = [], isLoading } = useQuery<Mitigation[]>({ queryKey: ["/api/mitigations"] });
   const { data: risks = [] } = useQuery<Risk[]>({ queryKey: ["/api/risks"] });
@@ -142,11 +206,24 @@ export default function MitigationsPage() {
 
   const filtered = allMitigations.filter((m) => {
     const matchSearch = m.actionDescription.toLowerCase().includes(search.toLowerCase()) || (m.picName?.toLowerCase().includes(search.toLowerCase()) ?? false);
-    const matchStatus = statusFilter === "all" || m.status === statusFilter;
-    return matchSearch && matchStatus;
+    const matchWf = wfFilter === "all" || (m.workflowStatus || "draft") === wfFilter;
+    return matchSearch && matchWf;
   });
 
   const getRiskInfo = (riskId: number) => risks.find(r => r.id === riskId);
+
+  const canEdit = (mit: Mitigation) => {
+    if (isSysadmin) return false;
+    const wf = mit.workflowStatus || "draft";
+    if (isInputer) return (!mit.createdBy || mit.createdBy === user?.id) && (wf === "draft" || wf === "returned");
+    return true;
+  };
+
+  const canDelete = (mit: Mitigation) => {
+    if (isSysadmin || !canCreateRisk) return false;
+    const wf = mit.workflowStatus || "draft";
+    return (!mit.createdBy || mit.createdBy === user?.id) && (wf === "draft" || wf === "returned");
+  };
 
   if (isLoading) return <div className="p-6 space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-96 w-full" /></div>;
 
@@ -180,16 +257,16 @@ export default function MitigationsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Cari mitigasi..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-search-mitigations" />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]" data-testid="select-status-filter">
+        <Select value={wfFilter} onValueChange={setWfFilter}>
+          <SelectTrigger className="w-[180px]" data-testid="select-wf-filter">
             <Filter className="h-4 w-4 mr-2" /><SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Semua Status</SelectItem>
-            <SelectItem value="planned">Planned</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
+            <SelectItem value="all">Semua Status Approval</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="submitted">Diajukan</SelectItem>
+            <SelectItem value="returned">Dikembalikan</SelectItem>
+            <SelectItem value="approved">Disetujui</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -199,15 +276,15 @@ export default function MitigationsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[250px]">Tindakan</TableHead>
+                <TableHead className="w-[220px]">Tindakan</TableHead>
                 <TableHead>Risiko</TableHead>
                 <TableHead>Strategi</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[120px]">Progress</TableHead>
+                <TableHead>Status Kerja</TableHead>
+                <TableHead>Status Approval</TableHead>
+                <TableHead className="w-[100px]">Progress</TableHead>
                 <TableHead>PIC</TableHead>
                 <TableHead>Deadline</TableHead>
-                <TableHead>Biaya</TableHead>
-                <TableHead className="w-[100px]">Aksi</TableHead>
+                <TableHead className="w-[130px]">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -217,6 +294,7 @@ export default function MitigationsPage() {
                 </TableCell></TableRow>
               ) : filtered.map((mit) => {
                 const status = getMitigationStatusInfo(mit.status);
+                const wfStatus = getMitigationWorkflowInfo(mit.workflowStatus || "draft");
                 const strategy = getStrategyInfo(mit.strategy);
                 const risk = getRiskInfo(mit.riskId);
                 return (
@@ -229,6 +307,7 @@ export default function MitigationsPage() {
                     </TableCell>
                     <TableCell><Badge variant="outline" className={strategy.className}>{strategy.label}</Badge></TableCell>
                     <TableCell><Badge variant="outline" className={status.className}>{status.label}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className={wfStatus.className}>{wfStatus.label}</Badge></TableCell>
                     <TableCell>
                       <div className="space-y-1">
                         <Progress value={mit.progress} className="h-1.5" />
@@ -239,11 +318,17 @@ export default function MitigationsPage() {
                     <TableCell className="text-sm text-muted-foreground">
                       {mit.deadline ? <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{mit.deadline}</span> : "-"}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{formatCurrency(mit.estimatedCost)}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        {canCreateRisk && <Button size="icon" variant="ghost" onClick={() => { setEditing(mit); setDialogOpen(true); }} data-testid={`button-edit-mitigation-${mit.id}`}><Pencil className="h-4 w-4" /></Button>}
-                        {canCreateRisk && <Button size="icon" variant="ghost" onClick={() => deleteMut.mutate(mit.id)} data-testid={`button-delete-mitigation-${mit.id}`}><Trash2 className="h-4 w-4" /></Button>}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {canEdit(mit) && (
+                          <Button size="icon" variant="ghost" onClick={() => { setEditing(mit); setDialogOpen(true); }} data-testid={`button-edit-mitigation-${mit.id}`}><Pencil className="h-4 w-4" /></Button>
+                        )}
+                        {canDelete(mit) && (
+                          <Button size="icon" variant="ghost" onClick={() => deleteMut.mutate(mit.id)} data-testid={`button-delete-mitigation-${mit.id}`}><Trash2 className="h-4 w-4" /></Button>
+                        )}
+                        <Button size="icon" variant="ghost" onClick={() => setWorkflowMit(workflowMit?.id === mit.id ? undefined : mit)} data-testid={`button-workflow-mitigation-${mit.id}`}>
+                          <Send className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -253,6 +338,23 @@ export default function MitigationsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {workflowMit && (
+        <Dialog open={!!workflowMit} onOpenChange={(open) => { if (!open) setWorkflowMit(undefined); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Workflow Mitigasi</DialogTitle></DialogHeader>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground line-clamp-2">{workflowMit.actionDescription}</p>
+              <div className="flex gap-2">
+                <Badge variant="outline" className={getMitigationWorkflowInfo(workflowMit.workflowStatus || "draft").className}>
+                  {getMitigationWorkflowInfo(workflowMit.workflowStatus || "draft").label}
+                </Badge>
+              </div>
+              <WorkflowPanel mit={workflowMit} onDone={() => setWorkflowMit(undefined)} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

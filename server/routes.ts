@@ -378,17 +378,21 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Tidak memiliki akses ke risiko organisasi ini" });
       }
     }
-    const mit = await storage.createMitigation(parsed.data);
+    const mit = await storage.createMitigation({ ...parsed.data, createdBy: req.session.userId! });
     res.status(201).json(mit);
   });
 
-  app.patch("/api/mitigations/:id", requireRole("inputer"), async (req, res) => {
+  app.patch("/api/mitigations/:id", requireRole("inputer", "reviewer", "approval"), async (req, res) => {
     const id = parseInt(req.params.id);
     const parsed = insertMitigationSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const existing = await storage.getMitigations();
     const oldMit = existing.find(m => m.id === id);
     if (!oldMit) return res.status(404).json({ message: "Not found" });
+    const role = req.session.role!;
+    if (role === "inputer" && oldMit.createdBy && oldMit.createdBy !== req.session.userId) {
+      return res.status(403).json({ message: "Hanya pembuat mitigasi yang dapat mengedit" });
+    }
     const visibleOrgIds = await getUserVisibleOrgIds(req);
     if (visibleOrgIds) {
       const risk = await storage.getRisk(oldMit.riskId);

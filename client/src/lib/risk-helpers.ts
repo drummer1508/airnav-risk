@@ -110,6 +110,45 @@ export function getMitigationStatusInfo(status: string) {
   }
 }
 
+export function getMitigationWorkflowInfo(workflowStatus: string) {
+  switch (workflowStatus) {
+    case "draft": return { label: "Draft", className: "bg-muted text-muted-foreground" };
+    case "submitted": return { label: "Diajukan", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" };
+    case "returned": return { label: "Dikembalikan", className: "bg-red-500/10 text-red-600 dark:text-red-400" };
+    case "approved": return { label: "Disetujui", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" };
+    default: return { label: workflowStatus, className: "bg-muted text-muted-foreground" };
+  }
+}
+
+export type MitigationWorkflowAction = {
+  toStatus: string;
+  label: string;
+  variant: "default" | "destructive" | "outline";
+  requireComment: boolean;
+};
+
+export function getAvailableMitigationActions(workflowStatus: string, userRole: string, isOwner: boolean): MitigationWorkflowAction[] {
+  const actions: MitigationWorkflowAction[] = [];
+  if (userRole === "inputer" && isOwner) {
+    if (workflowStatus === "draft" || workflowStatus === "returned") {
+      actions.push({ toStatus: "submitted", label: "Submit untuk Review", variant: "default", requireComment: false });
+    }
+  }
+  if (userRole === "reviewer") {
+    if (workflowStatus === "submitted") {
+      actions.push({ toStatus: "approved", label: "Setujui Mitigasi", variant: "default", requireComment: false });
+      actions.push({ toStatus: "returned", label: "Kembalikan ke Inputer", variant: "destructive", requireComment: true });
+    }
+  }
+  if (userRole === "approval") {
+    if (workflowStatus === "submitted") {
+      actions.push({ toStatus: "approved", label: "Setujui Mitigasi", variant: "default", requireComment: false });
+      actions.push({ toStatus: "returned", label: "Kembalikan ke Inputer", variant: "destructive", requireComment: true });
+    }
+  }
+  return actions;
+}
+
 export function getStrategyInfo(strategy: string) {
   switch (strategy) {
     case "reduce": return { label: "Reduce", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" };
