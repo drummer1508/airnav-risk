@@ -67,13 +67,13 @@ function getValidTransitions(role: string, line: number): Record<string, string[
   }
   if (role === "reviewer" && line === 3) {
     return {
-      l2_finalized: ["l3_review", "l3_returned", "l3_finalized"],
-      l3_review: ["l3_review", "l3_returned", "l3_finalized"],
+      l2_finalized: ["l3_review", "l3_returned", "validated"],
+      l3_review: ["l3_review", "l3_returned", "validated"],
     };
   }
   if (role === "approval" && line === 3) {
     return {
-      l3_review: ["l3_finalized", "l3_returned"],
+      l3_review: ["validated", "l3_returned"],
     };
   }
   return {};
@@ -508,7 +508,6 @@ export async function registerRoutes(
     const l2ReviewRisks = allRisks.filter(r => r.currentStatus === "l2_review" || r.currentStatus === "l2_returned").length;
     const l2FinalizedRisks = allRisks.filter(r => r.currentStatus === "l2_finalized").length;
     const l3ReviewRisks = allRisks.filter(r => r.currentStatus === "l3_review" || r.currentStatus === "l3_returned").length;
-    const l3FinalizedRisks = allRisks.filter(r => r.currentStatus === "l3_finalized").length;
     const approvedRisks = allRisks.filter(r => r.currentStatus === "approved").length;
     const validatedRisks = allRisks.filter(r => r.currentStatus === "validated").length;
 
@@ -568,7 +567,6 @@ export async function registerRoutes(
       l2ReviewRisks,
       l2FinalizedRisks,
       l3ReviewRisks,
-      l3FinalizedRisks,
       approvedRisks,
       validatedRisks,
       criticalRisks,

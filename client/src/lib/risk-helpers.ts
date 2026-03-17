@@ -18,9 +18,7 @@ export function getStatusInfo(status: string) {
     case "l2_finalized": return { label: "Final L2", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" };
     case "l3_review": return { label: "Review L3 (Audit)", className: "bg-violet-500/10 text-violet-600 dark:text-violet-400" };
     case "l3_returned": return { label: "Dikembalikan L3→L2", className: "bg-rose-500/10 text-rose-600 dark:text-rose-400" };
-    case "l3_finalized": return { label: "Final L3 (Audit)", className: "bg-teal-500/10 text-teal-600 dark:text-teal-400" };
-    case "approved": return { label: "Approved", className: "bg-purple-500/10 text-purple-600 dark:text-purple-400" };
-    case "validated": return { label: "Validated", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" };
+    case "validated": return { label: "Validated", className: "bg-teal-500/10 text-teal-600 dark:text-teal-400" };
     case "sent_back": return { label: "Sent Back", className: "bg-red-500/10 text-red-600 dark:text-red-400" };
     default: return { label: status, className: "bg-muted text-muted-foreground" };
   }
@@ -86,13 +84,13 @@ export function getAvailableWorkflowActions(currentStatus: string, userRole: str
     if (currentStatus === "l2_finalized" || currentStatus === "l3_review") {
       actions.push({ toStatus: "l3_review", label: "Koreksi Audit", variant: "outline", requireComment: true });
       actions.push({ toStatus: "l3_returned", label: "Kembalikan ke L2", variant: "destructive", requireComment: true });
-      actions.push({ toStatus: "l3_finalized", label: "Finalize Audit", variant: "default", requireComment: false });
+      actions.push({ toStatus: "validated", label: "Finalize Audit", variant: "default", requireComment: false });
     }
   }
 
   if (userRole === "approval" && userLine === 3) {
     if (currentStatus === "l3_review") {
-      actions.push({ toStatus: "l3_finalized", label: "Finalize L3 (Audit)", variant: "default", requireComment: false });
+      actions.push({ toStatus: "validated", label: "Validate (Final)", variant: "default", requireComment: false });
       actions.push({ toStatus: "l3_returned", label: "Kembalikan ke L2", variant: "destructive", requireComment: true });
     }
   }

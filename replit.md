@@ -25,7 +25,7 @@ A comprehensive Enterprise Risk Management (ERM) system for AirNav Indonesia, bu
 - **Iteration**: Documents can go back and forth between roles until finalized
 - **Line-based access**: L1 users (line=1) handle L1 transitions, L2 users (line=2) handle L2 transitions, L3 users (line=3) handle L3 transitions
 - **Comment required**: Return/rejection actions require mandatory comments
-- **Statuses**: draft, submitted, returned_to_inputer, reviewed, returned_to_reviewer, l1_approved, l2_review, l2_returned, l2_finalized, l3_review, l3_returned, l3_finalized
+- **Statuses**: draft, submitted, returned_to_inputer, reviewed, returned_to_reviewer, l1_approved, l2_review, l2_returned, l2_finalized, l3_review, l3_returned, validated
 
 ## Data Model
 - `users`: id, username, password, fullName, orgUnitId, role, line (0=sysadmin, 1=L1, 2=L2, 3=L3), isActive
