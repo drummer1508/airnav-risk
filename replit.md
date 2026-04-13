@@ -12,7 +12,9 @@ A comprehensive Enterprise Risk Management (ERM) system for AirNav Indonesia, bu
 ## Features
 - **Dashboard**: KPIs, 5x5 risk heat map, risk level distribution, L1/L2/L3 workflow status (8 columns), top 10 risks, taxonomy & org unit breakdowns, mitigation progress; period selector + time-series bar chart
 - **Reporting Periods**: Quarterly (Q1–Q4) period management by L2+; open/close control; closed periods are read-only; carry-forward copies risk+mitigation state to new period; dashboard time-series by period
-- **Risk Register**: Full CRUD with 9-parameter impact scoring (Max Impact principle), 3-level taxonomy (T1→T2→T3), L1/L2/L3 workflow with iterative review, period filter; closed period enforcement
+- **Risk Types**: Two distinct types — **Top Risk** (ditetapkan oleh L2, L1 update progress mitigasi + RKAP link) and **General Risk** (dibuat oleh L1, alur workflow normal); type badge and filter in risk register
+- **RKAP Integration**: Mitigations for Top Risk can link to RKAP (Rencana Kerja dan Anggaran Perusahaan) activities with code, activity name, budget, and realization fields
+- **Risk Register**: Full CRUD with 9-parameter impact scoring (Max Impact principle), 3-level taxonomy (T1→T2→T3), L1/L2/L3 workflow with iterative review, period filter; closed period enforcement; risk type filter
 - **Workflow Actions**: Role-based workflow buttons in risk detail dialog (Submit, Review, Approve, Return, Finalize)
 - **Audit Trail**: Field-level change tracking with who/when, viewable via clickable icons on each data field
 - **Mitigations**: Strategy-based (Reduce/Transfer/Avoid/Accept) with progress tracking, PIC, cost estimates, audit trail per record; period-aware

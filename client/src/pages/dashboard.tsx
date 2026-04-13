@@ -18,6 +18,7 @@ import {
   TrendingUp,
   Calendar,
   BarChart3,
+  Star,
 } from "lucide-react";
 import { getRiskLevelInfo, getStatusInfo, getHeatMapColor } from "@/lib/risk-helpers";
 import type { OrgUnit, ReportingPeriod } from "@shared/schema";
@@ -42,6 +43,8 @@ interface DashboardStats {
   completedMitigations: number;
   plannedMitigations: number;
   totalMitigations: number;
+  topRiskCount: number;
+  generalRiskCount: number;
   risksByT1: { name: string; count: number }[];
   risksByOrgUnit: { name: string; type: string; count: number }[];
   heatMapData: { likelihood: number; impact: number; title: string; id: number; riskCode: string; currentStatus: string }[];
@@ -290,10 +293,12 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard title="Total Risiko" value={stats.totalRisks} icon={AlertTriangle} description={`${stats.criticalRisks} sangat tinggi, ${stats.highRisks} tinggi`} iconColor="text-primary" />
-        <StatCard title="Risiko Sangat Tinggi" value={stats.criticalRisks} icon={AlertOctagon} description="Skor 16-25, perlu tindakan segera" iconColor="text-red-500 dark:text-red-400" />
-        <StatCard title="Mitigasi Aktif" value={stats.activeMitigations} icon={Activity} description={`${stats.completedMitigations} selesai dari ${stats.totalMitigations}`} iconColor="text-amber-500 dark:text-amber-400" />
+        <StatCard title="Top Risk" value={stats.topRiskCount ?? 0} icon={Star} description="Ditetapkan & dipantau oleh L2" iconColor="text-amber-500 dark:text-amber-400" />
+        <StatCard title="General Risk" value={stats.generalRiskCount ?? 0} icon={FileText} description="Dibuat melalui alur L1 normal" iconColor="text-blue-500 dark:text-blue-400" />
+        <StatCard title="Sangat Tinggi" value={stats.criticalRisks} icon={AlertOctagon} description="Skor 16-25, perlu tindakan segera" iconColor="text-red-500 dark:text-red-400" />
+        <StatCard title="Mitigasi Aktif" value={stats.activeMitigations} icon={Activity} description={`${stats.completedMitigations} selesai dari ${stats.totalMitigations}`} iconColor="text-emerald-500 dark:text-emerald-400" />
         <StatCard title="Validated" value={stats.validatedRisks} icon={ShieldCheck} description="Risiko telah divalidasi final" iconColor="text-teal-500 dark:text-teal-400" />
       </div>
 

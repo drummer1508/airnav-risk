@@ -411,9 +411,18 @@ export async function registerRoutes(
     res.json(risk);
   });
 
-  app.post("/api/risks", requireRole("inputer"), async (req, res) => {
+  app.post("/api/risks", requireRole("inputer", "reviewer", "approval"), async (req, res) => {
     const parsed = insertRiskSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const line = req.session.line ?? 1;
+    const role = req.session.role!;
+    const riskType = parsed.data.riskType || "general_risk";
+    if (riskType === "top_risk" && line < 2) {
+      return res.status(403).json({ message: "Hanya L2 ke atas yang dapat membuat Top Risk" });
+    }
+    if (riskType === "general_risk" && role !== "inputer" && line < 2) {
+      return res.status(403).json({ message: "General Risk hanya dapat dibuat oleh Inputer" });
+    }
     if (parsed.data.periodId) {
       const period = await storage.getReportingPeriod(parsed.data.periodId);
       if (period && period.status === "closed") {
@@ -424,7 +433,7 @@ export async function registerRoutes(
     if (visibleOrgIds && parsed.data.orgUnitId && !visibleOrgIds.includes(parsed.data.orgUnitId)) {
       return res.status(403).json({ message: "Anda tidak dapat membuat risiko untuk organisasi di luar cakupan Anda" });
     }
-    const riskData = { ...parsed.data, createdBy: req.session.userId! };
+    const riskData = { ...parsed.data, riskType, createdBy: req.session.userId! };
     const risk = await storage.createRisk(riskData);
     res.status(201).json(risk);
   });
@@ -442,13 +451,21 @@ export async function registerRoutes(
       }
     }
     const role = req.session.role!;
+    const line = req.session.line ?? 1;
     const visibleOrgIds = await getUserVisibleOrgIds(req);
     if (visibleOrgIds && existing.orgUnitId && !visibleOrgIds.includes(existing.orgUnitId)) {
       return res.status(403).json({ message: "Tidak memiliki akses ke data organisasi ini" });
     }
+    if (parsed.data.riskType === "top_risk" && line < 2) {
+      return res.status(403).json({ message: "Hanya L2 ke atas yang dapat menetapkan Top Risk" });
+    }
+    const isTopRisk = existing.riskType === "top_risk";
     if (role === "inputer" || role === "reviewer") {
-      if (existing.createdBy && existing.createdBy !== req.session.userId) {
+      if (!isTopRisk && existing.createdBy && existing.createdBy !== req.session.userId) {
         return res.status(403).json({ message: "Anda hanya bisa mengubah risiko yang dibuat oleh Anda sendiri" });
+      }
+      if (isTopRisk && line < 2 && parsed.data.riskType) {
+        return res.status(403).json({ message: "L1 tidak dapat mengubah tipe risiko Top Risk" });
       }
     }
     const { createdBy: _cb, ...safeData } = parsed.data as any;
@@ -675,6 +692,9 @@ export async function registerRoutes(
     const approvedRisks = allRisks.filter(r => r.currentStatus === "approved").length;
     const validatedRisks = allRisks.filter(r => r.currentStatus === "validated").length;
 
+    const topRiskCount = allRisks.filter(r => r.riskType === "top_risk").length;
+    const generalRiskCount = allRisks.filter(r => (r.riskType || "general_risk") === "general_risk").length;
+
     const criticalRisks = allRisks.filter(r => r.inherentRiskScore >= 16).length;
     const highRisks = allRisks.filter(r => r.inherentRiskScore >= 9 && r.inherentRiskScore < 16).length;
     const mediumRisks = allRisks.filter(r => r.inherentRiskScore >= 4 && r.inherentRiskScore < 9).length;
@@ -741,6 +761,8 @@ export async function registerRoutes(
       completedMitigations,
       plannedMitigations,
       totalMitigations: allMitigations.length,
+      topRiskCount,
+      generalRiskCount,
       risksByT1,
       risksByOrgUnit,
       heatMapData,

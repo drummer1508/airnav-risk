@@ -18,7 +18,7 @@ import type { Risk, OrgUnit, TaxonomyT1, TaxonomyT2, TaxonomyT3, WorkflowLog, Mi
 import { getRiskLevelInfo, getStatusInfo, getMitigationStatusInfo, getStrategyInfo, getAvailableWorkflowActions, IMPACT_CRITERIA_LABELS, IMPACT_DESCRIPTIONS, LIKELIHOOD_DESCRIPTIONS, formatCurrency } from "@/lib/risk-helpers";
 import { useAuth } from "@/lib/auth";
 import { AuditTrailIcon, AuditTrailList } from "@/components/audit-trail";
-import { Plus, Search, AlertTriangle, Pencil, Trash2, Filter, Eye, History, ChevronRight, Send, Lock, Calendar } from "lucide-react";
+import { Plus, Search, AlertTriangle, Pencil, Trash2, Filter, Eye, History, ChevronRight, Send, Lock, Calendar, Star } from "lucide-react";
 
 function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }: {
   risk?: Risk; orgUnits: OrgUnit[]; t1s: TaxonomyT1[]; t2s: TaxonomyT2[]; t3s: TaxonomyT3[];
@@ -26,7 +26,10 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
 }) {
   const { user } = useAuth();
   const userOrgUnitId = user?.orgUnitId;
+  const isL2Plus = (user?.line ?? 1) >= 2;
+
   const [form, setForm] = useState({
+    riskType: risk?.riskType || "general_risk",
     riskCode: risk?.riskCode || "",
     title: risk?.title || "",
     description: risk?.description || "",
@@ -67,6 +70,7 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
+      riskType: form.riskType,
       riskCode: form.riskCode,
       title: form.title,
       description: form.description || null,
@@ -105,6 +109,23 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
         </TabsList>
 
         <TabsContent value="info" className="space-y-4 mt-4">
+          {isL2Plus && (
+            <div className="space-y-2">
+              <Label>Jenis Risiko</Label>
+              <Select value={form.riskType} onValueChange={(v) => setForm({ ...form, riskType: v })}>
+                <SelectTrigger data-testid="select-risk-type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="general_risk">General Risk — dibuat oleh L1</SelectItem>
+                  <SelectItem value="top_risk">Top Risk — ditetapkan oleh L2</SelectItem>
+                </SelectContent>
+              </Select>
+              {form.riskType === "top_risk" && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <Star className="h-3 w-3" />Top Risk akan dipantau langsung oleh L2. L1 akan mengupdate status dan progress mitigasinya.
+                </p>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>ID Risiko *</Label>
@@ -311,6 +332,13 @@ function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s, onStatusChange }: {
     <div className="space-y-4 max-h-[70vh] overflow-y-auto">
       <div className="flex items-center gap-2 flex-wrap">
         <Badge variant="outline" className="text-xs">{risk.riskCode}</Badge>
+        {risk.riskType === "top_risk" ? (
+          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-300 text-xs flex items-center gap-1">
+            <Star className="h-3 w-3" />Top Risk
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-xs text-muted-foreground">General Risk</Badge>
+        )}
         <Badge className={status.className}>{status.label}</Badge>
         <Badge className={level.className}>{risk.inherentRiskScore} - {level.label}</Badge>
         <AuditTrailIcon tableName="risks" recordId={risk.id} />
@@ -430,6 +458,19 @@ function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s, onStatusChange }: {
                     <span>Progress: {m.progress}%</span>
                     {m.picName && <span>PIC: {m.picName}</span>}
                   </div>
+                  {(m as any).rkapCode && (
+                    <div className="mt-2 text-xs rounded p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 space-y-1">
+                      <div className="flex items-center gap-1 font-medium text-amber-800 dark:text-amber-300">
+                        <Star className="h-3 w-3" />Kegiatan RKAP
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 text-amber-700 dark:text-amber-400">
+                        <span>Kode: <strong>{(m as any).rkapCode}</strong></span>
+                        {(m as any).rkapActivityName && <span>Kegiatan: {(m as any).rkapActivityName}</span>}
+                        {(m as any).rkapBudget && <span>Anggaran: {formatCurrency(Number((m as any).rkapBudget))}</span>}
+                        {(m as any).rkapRealization && <span>Realisasi: {formatCurrency(Number((m as any).rkapRealization))}</span>}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -470,6 +511,7 @@ function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s, onStatusChange }: {
 export default function RisksPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [periodFilter, setPeriodFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [detailRisk, setDetailRisk] = useState<Risk | null>(null);
@@ -517,7 +559,8 @@ export default function RisksPage() {
   const filtered = allRisks.filter((r) => {
     const matchSearch = r.title.toLowerCase().includes(search.toLowerCase()) || r.riskCode.toLowerCase().includes(search.toLowerCase()) || (r.riskOwner?.toLowerCase().includes(search.toLowerCase()) ?? false);
     const matchStatus = statusFilter === "all" || r.currentStatus === statusFilter;
-    return matchSearch && matchStatus;
+    const matchType = typeFilter === "all" || (r.riskType || "general_risk") === typeFilter;
+    return matchSearch && matchStatus && matchType;
   });
 
   const getOrgName = (id: number | null) => { if (!id) return "-"; return orgUnits.find(u => u.id === id)?.name || "-"; };
@@ -569,6 +612,16 @@ export default function RisksPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Cari risiko..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-search-risks" />
         </div>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-[150px]" data-testid="select-type-filter">
+            <Star className="h-4 w-4 mr-1.5 shrink-0" /><SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Jenis</SelectItem>
+            <SelectItem value="top_risk">Top Risk</SelectItem>
+            <SelectItem value="general_risk">General Risk</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={periodFilter} onValueChange={setPeriodFilter}>
           <SelectTrigger className="w-[150px]" data-testid="select-period-filter">
             <Calendar className="h-4 w-4 mr-1.5 shrink-0" /><SelectValue />
@@ -604,8 +657,9 @@ export default function RisksPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[100px]">Kode</TableHead>
-                <TableHead className="w-[250px]">Judul Risiko</TableHead>
+                <TableHead className="w-[80px]">Kode</TableHead>
+                <TableHead className="w-[220px]">Judul Risiko</TableHead>
+                <TableHead className="w-[90px]">Jenis</TableHead>
                 <TableHead>Peristiwa (T3)</TableHead>
                 <TableHead className="text-center">Impact</TableHead>
                 <TableHead className="text-center">Likelihood</TableHead>
@@ -617,18 +671,28 @@ export default function RisksPage() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
                   <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" /><p>Tidak ada risiko ditemukan</p>
                 </TableCell></TableRow>
               ) : filtered.map((risk) => {
                 const level = getRiskLevelInfo(risk.inherentRiskScore);
                 const status = getStatusInfo(risk.currentStatus);
+                const isTopRisk = risk.riskType === "top_risk";
                 return (
                   <TableRow key={risk.id} data-testid={`risk-row-${risk.id}`}>
                     <TableCell className="text-xs font-mono text-muted-foreground">{risk.riskCode}</TableCell>
                     <TableCell>
                       <p className="font-medium text-sm">{risk.title}</p>
                       {risk.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{risk.description}</p>}
+                    </TableCell>
+                    <TableCell>
+                      {isTopRisk ? (
+                        <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-300 text-xs flex items-center gap-1 w-fit">
+                          <Star className="h-3 w-3" />Top
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs text-muted-foreground w-fit">General</Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm">{getT3Name(risk.t3Id)}</TableCell>
                     <TableCell className="text-center text-sm font-medium">{risk.impactScore}</TableCell>
@@ -639,8 +703,10 @@ export default function RisksPage() {
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Button size="icon" variant="ghost" onClick={() => setDetailRisk(risk)} data-testid={`button-view-risk-${risk.id}`}><Eye className="h-4 w-4" /></Button>
-                        {!isSysadmin && (!risk.createdBy || risk.createdBy === user?.id || (!isInputer && !isReviewer)) && (
-                          <Button size="icon" variant="ghost" onClick={() => { setEditingRisk(risk); setFormOpen(true); }} data-testid={`button-edit-risk-${risk.id}`}><Pencil className="h-4 w-4" /></Button>
+                        {!isSysadmin && (!isPeriodClosed) && (
+                          (risk.riskType === "top_risk" || !risk.createdBy || risk.createdBy === user?.id || (!isInputer && !isReviewer)) && (
+                            <Button size="icon" variant="ghost" onClick={() => { setEditingRisk(risk); setFormOpen(true); }} data-testid={`button-edit-risk-${risk.id}`}><Pencil className="h-4 w-4" /></Button>
+                          )
                         )}
                         {canCreateRisk && (!risk.createdBy || risk.createdBy === user?.id) && (
                           <Button size="icon" variant="ghost" onClick={() => deleteMut.mutate(risk.id)} data-testid={`button-delete-risk-${risk.id}`}><Trash2 className="h-4 w-4" /></Button>

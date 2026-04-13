@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Mitigation, Risk } from "@shared/schema";
 import { getMitigationStatusInfo, getMitigationWorkflowInfo, getAvailableMitigationActions, getStrategyInfo, formatCurrency } from "@/lib/risk-helpers";
 import { useAuth } from "@/lib/auth";
-import { Plus, Search, Shield, Pencil, Trash2, Filter, Calendar, Send, CheckCircle, RotateCcw } from "lucide-react";
+import { Plus, Search, Shield, Pencil, Trash2, Filter, Calendar, Send, CheckCircle, RotateCcw, Star } from "lucide-react";
 
 function MitigationForm({ mitigation, risks, onSave, onCancel, isPending }: {
   mitigation?: Mitigation; risks: Risk[]; onSave: (data: any) => void; onCancel: () => void; isPending: boolean;
@@ -30,7 +30,14 @@ function MitigationForm({ mitigation, risks, onSave, onCancel, isPending }: {
     estimatedCost: mitigation?.estimatedCost || "",
     progress: mitigation?.progress?.toString() || "0",
     status: mitigation?.status || "planned",
+    rkapCode: (mitigation as any)?.rkapCode || "",
+    rkapActivityName: (mitigation as any)?.rkapActivityName || "",
+    rkapBudget: (mitigation as any)?.rkapBudget || "",
+    rkapRealization: (mitigation as any)?.rkapRealization || "",
   });
+
+  const selectedRisk = risks.find(r => r.id === parseInt(form.riskId));
+  const isTopRisk = selectedRisk?.riskType === "top_risk";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +50,10 @@ function MitigationForm({ mitigation, risks, onSave, onCancel, isPending }: {
       estimatedCost: form.estimatedCost || null,
       progress: parseInt(form.progress),
       status: form.status,
+      rkapCode: isTopRisk ? (form.rkapCode || null) : null,
+      rkapActivityName: isTopRisk ? (form.rkapActivityName || null) : null,
+      rkapBudget: isTopRisk ? (form.rkapBudget || null) : null,
+      rkapRealization: isTopRisk ? (form.rkapRealization || null) : null,
     });
   };
 
@@ -103,6 +114,38 @@ function MitigationForm({ mitigation, risks, onSave, onCancel, isPending }: {
         <Label>Progress ({form.progress}%)</Label>
         <Input type="range" min="0" max="100" step="5" value={form.progress} onChange={(e) => setForm({ ...form, progress: e.target.value })} className="w-full" data-testid="input-progress" />
       </div>
+
+      {isTopRisk && (
+        <div className="space-y-3 border border-amber-200 dark:border-amber-800 rounded-lg p-4 bg-amber-50/50 dark:bg-amber-950/20">
+          <div className="flex items-center gap-2">
+            <Star className="h-4 w-4 text-amber-600" />
+            <Label className="font-semibold text-amber-800 dark:text-amber-300">Kegiatan RKAP Terkait</Label>
+            <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs">Top Risk</Badge>
+          </div>
+          <p className="text-xs text-amber-700 dark:text-amber-400">Isi informasi kegiatan RKAP yang mendukung mitigasi risiko ini.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Kode Kegiatan RKAP</Label>
+              <Input value={form.rkapCode} onChange={(e) => setForm({ ...form, rkapCode: e.target.value })} placeholder="RKAP-2025-001" className="text-sm" data-testid="input-rkap-code" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Nama Kegiatan RKAP</Label>
+              <Input value={form.rkapActivityName} onChange={(e) => setForm({ ...form, rkapActivityName: e.target.value })} placeholder="Nama kegiatan di RKAP" className="text-sm" data-testid="input-rkap-activity-name" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Anggaran RKAP (Rp)</Label>
+              <Input type="number" value={form.rkapBudget} onChange={(e) => setForm({ ...form, rkapBudget: e.target.value })} placeholder="0" className="text-sm" data-testid="input-rkap-budget" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Realisasi Anggaran (Rp)</Label>
+              <Input type="number" value={form.rkapRealization} onChange={(e) => setForm({ ...form, rkapRealization: e.target.value })} placeholder="0" className="text-sm" data-testid="input-rkap-realization" />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="outline" onClick={onCancel} data-testid="button-cancel">Batal</Button>
         <Button type="submit" disabled={isPending || !form.actionDescription || !form.riskId} data-testid="button-save-mitigation">
@@ -301,9 +344,23 @@ export default function MitigationsPage() {
                   <TableRow key={mit.id} data-testid={`mitigation-row-${mit.id}`}>
                     <TableCell>
                       <p className="font-medium text-sm line-clamp-2">{mit.actionDescription}</p>
+                      {(mit as any).rkapCode && (
+                        <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 flex items-center gap-1">
+                          <Star className="h-3 w-3" />RKAP: {(mit as any).rkapCode}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs">
-                      {risk ? <span className="font-mono text-muted-foreground">{risk.riskCode}</span> : "-"}
+                      {risk ? (
+                        <div className="space-y-1">
+                          <span className="font-mono text-muted-foreground">{risk.riskCode}</span>
+                          {risk.riskType === "top_risk" && (
+                            <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-xs flex items-center gap-1 w-fit">
+                              <Star className="h-2.5 w-2.5" />Top
+                            </Badge>
+                          )}
+                        </div>
+                      ) : "-"}
                     </TableCell>
                     <TableCell><Badge variant="outline" className={strategy.className}>{strategy.label}</Badge></TableCell>
                     <TableCell><Badge variant="outline" className={status.className}>{status.label}</Badge></TableCell>

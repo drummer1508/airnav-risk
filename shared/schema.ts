@@ -59,6 +59,7 @@ export const risks = pgTable("risks", {
   id: serial("id").primaryKey(),
   periodId: integer("period_id"),
   parentRiskId: integer("parent_risk_id"),
+  riskType: text("risk_type").notNull().default("general_risk"),
   riskCode: text("risk_code").notNull(),
   title: text("title").notNull(),
   description: text("description"),
@@ -107,6 +108,10 @@ export const mitigations = pgTable("mitigations", {
   status: text("status").notNull().default("planned"),
   workflowStatus: text("workflow_status").notNull().default("draft"),
   evidence: text("evidence"),
+  rkapCode: text("rkap_code"),
+  rkapActivityName: text("rkap_activity_name"),
+  rkapBudget: numeric("rkap_budget"),
+  rkapRealization: numeric("rkap_realization"),
   createdBy: integer("created_by"),
   createdAt: timestamp("created_at").defaultNow(),
 });

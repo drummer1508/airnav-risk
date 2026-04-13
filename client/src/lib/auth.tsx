@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isReviewer: role === "reviewer",
     isApproval: role === "approval",
     canManageMaster: role === "sysadmin",
-    canCreateRisk: role === "inputer",
+    canCreateRisk: role === "inputer" || ((role === "reviewer" || role === "approval") && (currentUser?.line ?? 1) >= 2),
     canReviewRisk: role === "reviewer",
     canApproveRisk: role === "approval",
   };
