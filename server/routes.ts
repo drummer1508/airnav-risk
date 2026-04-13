@@ -125,6 +125,16 @@ export async function registerRoutes(
     res.json(safeUsers);
   });
 
+  app.get("/api/users/l1", requireRole("reviewer", "approval", "sysadmin"), async (req, res) => {
+    const line = req.session.line ?? 1;
+    const role = req.session.role!;
+    if (role !== "sysadmin" && line < 2) return res.status(403).json({ message: "Akses ditolak" });
+    const allUsers = await storage.getUsers();
+    const l1Users = allUsers.filter(u => u.line === 1 && u.isActive && u.role === "inputer");
+    const safeUsers = l1Users.map(({ password: _, ...u }) => u);
+    res.json(safeUsers);
+  });
+
   app.post("/api/users", requireRole("sysadmin"), async (req, res) => {
     const parsed = insertUserSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
@@ -461,11 +471,21 @@ export async function registerRoutes(
     }
     const isTopRisk = existing.riskType === "top_risk";
     if (role === "inputer" || role === "reviewer") {
-      if (!isTopRisk && existing.createdBy && existing.createdBy !== req.session.userId) {
-        return res.status(403).json({ message: "Anda hanya bisa mengubah risiko yang dibuat oleh Anda sendiri" });
-      }
-      if (isTopRisk && line < 2 && parsed.data.riskType) {
-        return res.status(403).json({ message: "L1 tidak dapat mengubah tipe risiko Top Risk" });
+      if (isTopRisk) {
+        if (line < 2 && parsed.data.riskType) {
+          return res.status(403).json({ message: "L1 tidak dapat mengubah tipe risiko Top Risk" });
+        }
+        if (line < 2 && parsed.data.assignedOwnerId !== undefined) {
+          return res.status(403).json({ message: "Hanya L2 ke atas yang dapat menetapkan risk owner Top Risk" });
+        }
+        const assignedOwnerId = existing.assignedOwnerId;
+        if (line < 2 && assignedOwnerId && assignedOwnerId !== req.session.userId) {
+          return res.status(403).json({ message: "Anda bukan risk owner yang ditetapkan untuk Top Risk ini" });
+        }
+      } else {
+        if (existing.createdBy && existing.createdBy !== req.session.userId) {
+          return res.status(403).json({ message: "Anda hanya bisa mengubah risiko yang dibuat oleh Anda sendiri" });
+        }
       }
     }
     const { createdBy: _cb, ...safeData } = parsed.data as any;
@@ -516,7 +536,7 @@ export async function registerRoutes(
     res.json(mits);
   });
 
-  app.post("/api/mitigations", requireRole("inputer"), async (req, res) => {
+  app.post("/api/mitigations", requireRole("inputer", "reviewer", "approval"), async (req, res) => {
     const parsed = insertMitigationSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     if (parsed.data.periodId) {
@@ -525,10 +545,18 @@ export async function registerRoutes(
         return res.status(403).json({ message: `Periode ${period.label} sudah ditutup dan tidak dapat diubah` });
       }
     }
+    const role = req.session.role!;
+    const risk = await storage.getRisk(parsed.data.riskId);
+    if (!risk) return res.status(404).json({ message: "Risiko tidak ditemukan" });
+    if (risk.riskType === "top_risk" && role === "inputer") {
+      const assignedOwnerId = (risk as any).assignedOwnerId;
+      if (assignedOwnerId && assignedOwnerId !== req.session.userId) {
+        return res.status(403).json({ message: "Hanya risk owner yang ditetapkan yang dapat mengelola mitigasi Top Risk ini" });
+      }
+    }
     const visibleOrgIds = await getUserVisibleOrgIds(req);
     if (visibleOrgIds) {
-      const risk = await storage.getRisk(parsed.data.riskId);
-      if (!risk || (risk.orgUnitId && !visibleOrgIds.includes(risk.orgUnitId))) {
+      if (risk.orgUnitId && !visibleOrgIds.includes(risk.orgUnitId)) {
         return res.status(403).json({ message: "Tidak memiliki akses ke risiko organisasi ini" });
       }
     }
@@ -544,8 +572,16 @@ export async function registerRoutes(
     const oldMit = existing.find(m => m.id === id);
     if (!oldMit) return res.status(404).json({ message: "Not found" });
     const role = req.session.role!;
-    if (role === "inputer" && oldMit.createdBy && oldMit.createdBy !== req.session.userId) {
-      return res.status(403).json({ message: "Hanya pembuat mitigasi yang dapat mengedit" });
+    if (role === "inputer") {
+      const parentRisk = await storage.getRisk(oldMit.riskId);
+      if (parentRisk?.riskType === "top_risk") {
+        const assignedOwnerId = (parentRisk as any).assignedOwnerId;
+        if (assignedOwnerId && assignedOwnerId !== req.session.userId) {
+          return res.status(403).json({ message: "Hanya risk owner yang ditetapkan yang dapat mengedit mitigasi Top Risk ini" });
+        }
+      } else if (oldMit.createdBy && oldMit.createdBy !== req.session.userId) {
+        return res.status(403).json({ message: "Hanya pembuat mitigasi yang dapat mengedit" });
+      }
     }
     const visibleOrgIds = await getUserVisibleOrgIds(req);
     if (visibleOrgIds) {

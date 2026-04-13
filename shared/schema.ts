@@ -60,6 +60,7 @@ export const risks = pgTable("risks", {
   periodId: integer("period_id"),
   parentRiskId: integer("parent_risk_id"),
   riskType: text("risk_type").notNull().default("general_risk"),
+  assignedOwnerId: integer("assigned_owner_id"),
   riskCode: text("risk_code").notNull(),
   title: text("title").notNull(),
   description: text("description"),

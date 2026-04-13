@@ -258,7 +258,15 @@ export default function MitigationsPage() {
   const canEdit = (mit: Mitigation) => {
     if (isSysadmin) return false;
     const wf = mit.workflowStatus || "draft";
-    if (isInputer) return (!mit.createdBy || mit.createdBy === user?.id) && (wf === "draft" || wf === "returned");
+    if (isInputer) {
+      const parentRisk = getRiskInfo(mit.riskId);
+      if (parentRisk?.riskType === "top_risk") {
+        const assignedOwnerId = (parentRisk as any).assignedOwnerId;
+        if (assignedOwnerId) return assignedOwnerId === user?.id && (wf === "draft" || wf === "returned");
+        return wf === "draft" || wf === "returned";
+      }
+      return (!mit.createdBy || mit.createdBy === user?.id) && (wf === "draft" || wf === "returned");
+    }
     return true;
   };
 

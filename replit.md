@@ -35,8 +35,8 @@ A comprehensive Enterprise Risk Management (ERM) system for AirNav Indonesia, bu
 - `org_units`: id, name, parentId, type, level
 - `taxonomy_t1/t2/t3`: Hierarchical risk classification
 - `reporting_periods`: id, year, quarter (1-4), label (e.g. "Q1 2025"), startDate, endDate, status (open/closed), openedAt, closedAt, openedBy, closedBy, notes
-- `risks`: periodId, parentRiskId (carry-forward lineage), riskCode (non-unique; unique per period), 9 impact params, impactScore (Max), inherentRiskScore, residual scores, taxonomy refs, org unit, workflow status, createdBy
-- `mitigations`: riskId, periodId, strategy, actionDescription, picName, deadline, estimatedCost, progress, status, workflowStatus, createdBy
+- `risks`: periodId, parentRiskId (carry-forward lineage), riskCode, riskType (general_risk|top_risk), assignedOwnerId (L1 user designated by L2 as Top Risk owner), 9 impact params, impactScore (Max), inherentRiskScore, residual scores, taxonomy refs, org unit, workflow status, createdBy
+- `mitigations`: riskId, periodId, strategy, actionDescription, picName, deadline, estimatedCost, progress, status, workflowStatus, createdBy; RKAP fields (rkapCode, rkapActivityName, rkapBudget, rkapRealization) for Top Risk only
 - `workflow_logs`: riskId, fromStatus, toStatus, actorName, actorRole, comments, timestamp
 - `audit_trails`: tableName, recordId, fieldName, oldValue, newValue, changedBy, changedByName, changedByRole, changedAt
 

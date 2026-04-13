@@ -14,15 +14,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import type { Risk, OrgUnit, TaxonomyT1, TaxonomyT2, TaxonomyT3, WorkflowLog, Mitigation, ReportingPeriod } from "@shared/schema";
+import type { Risk, OrgUnit, TaxonomyT1, TaxonomyT2, TaxonomyT3, WorkflowLog, Mitigation, ReportingPeriod, User } from "@shared/schema";
 import { getRiskLevelInfo, getStatusInfo, getMitigationStatusInfo, getStrategyInfo, getAvailableWorkflowActions, IMPACT_CRITERIA_LABELS, IMPACT_DESCRIPTIONS, LIKELIHOOD_DESCRIPTIONS, formatCurrency } from "@/lib/risk-helpers";
 import { useAuth } from "@/lib/auth";
 import { AuditTrailIcon, AuditTrailList } from "@/components/audit-trail";
 import { Plus, Search, AlertTriangle, Pencil, Trash2, Filter, Eye, History, ChevronRight, Send, Lock, Calendar, Star } from "lucide-react";
 
-function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }: {
+function RiskForm({ risk, orgUnits, t1s, t2s, t3s, l1Users, onSave, onCancel, isPending }: {
   risk?: Risk; orgUnits: OrgUnit[]; t1s: TaxonomyT1[]; t2s: TaxonomyT2[]; t3s: TaxonomyT3[];
-  onSave: (data: any) => void; onCancel: () => void; isPending: boolean;
+  l1Users: User[]; onSave: (data: any) => void; onCancel: () => void; isPending: boolean;
 }) {
   const { user } = useAuth();
   const userOrgUnitId = user?.orgUnitId;
@@ -30,6 +30,7 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
 
   const [form, setForm] = useState({
     riskType: risk?.riskType || "general_risk",
+    assignedOwnerId: (risk as any)?.assignedOwnerId?.toString() || "",
     riskCode: risk?.riskCode || "",
     title: risk?.title || "",
     description: risk?.description || "",
@@ -71,6 +72,7 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
     e.preventDefault();
     onSave({
       riskType: form.riskType,
+      assignedOwnerId: (form.assignedOwnerId && form.assignedOwnerId !== "none") ? parseInt(form.assignedOwnerId) : null,
       riskCode: form.riskCode,
       title: form.title,
       description: form.description || null,
@@ -110,19 +112,33 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
 
         <TabsContent value="info" className="space-y-4 mt-4">
           {isL2Plus && (
-            <div className="space-y-2">
-              <Label>Jenis Risiko</Label>
-              <Select value={form.riskType} onValueChange={(v) => setForm({ ...form, riskType: v })}>
-                <SelectTrigger data-testid="select-risk-type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="general_risk">General Risk — dibuat oleh L1</SelectItem>
-                  <SelectItem value="top_risk">Top Risk — ditetapkan oleh L2</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="space-y-3 border border-amber-200 dark:border-amber-800 rounded-lg p-3 bg-amber-50/30 dark:bg-amber-950/10">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1"><Star className="h-3.5 w-3.5 text-amber-600" />Jenis Risiko</Label>
+                <Select value={form.riskType} onValueChange={(v) => setForm({ ...form, riskType: v, assignedOwnerId: "" })}>
+                  <SelectTrigger data-testid="select-risk-type"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="general_risk">General Risk — dibuat oleh L1</SelectItem>
+                    <SelectItem value="top_risk">Top Risk — ditetapkan oleh L2</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               {form.riskType === "top_risk" && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                  <Star className="h-3 w-3" />Top Risk akan dipantau langsung oleh L2. L1 akan mengupdate status dan progress mitigasinya.
-                </p>
+                <div className="space-y-2">
+                  <Label className="text-sm text-amber-800 dark:text-amber-300">Risk Owner L1 (Penanggung Jawab Update)</Label>
+                  <Select value={form.assignedOwnerId} onValueChange={(v) => setForm({ ...form, assignedOwnerId: v })}>
+                    <SelectTrigger data-testid="select-assigned-owner"><SelectValue placeholder="Pilih L1 yang bertanggung jawab..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Belum ditetapkan —</SelectItem>
+                      {l1Users.map(u => (
+                        <SelectItem key={u.id} value={u.id.toString()}>{u.fullName} ({u.username})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    L1 ini akan dapat mengupdate progress Top Risk dan mitigasinya.
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -285,9 +301,9 @@ function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }
   );
 }
 
-function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s, onStatusChange }: {
+function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s, l1Users, onStatusChange }: {
   risk: Risk; orgUnits: OrgUnit[]; t1s: TaxonomyT1[]; t2s: TaxonomyT2[]; t3s: TaxonomyT3[];
-  onStatusChange?: () => void;
+  l1Users: User[]; onStatusChange?: () => void;
 }) {
   const level = getRiskLevelInfo(risk.inherentRiskScore);
   const status = getStatusInfo(risk.currentStatus);
@@ -402,6 +418,18 @@ function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s, onStatusChange }: {
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div className="flex items-center gap-1"><span className="text-muted-foreground">Unit Kerja:</span> <span className="font-medium ml-1">{orgUnit?.name || "-"}</span><AuditTrailIcon tableName="risks" recordId={risk.id} fieldName="orgUnitId" /></div>
         <div className="flex items-center gap-1"><span className="text-muted-foreground">Risk Owner:</span> <span className="font-medium ml-1">{risk.riskOwner || "-"}</span><AuditTrailIcon tableName="risks" recordId={risk.id} fieldName="riskOwner" /></div>
+        {risk.riskType === "top_risk" && (
+          <div className="col-span-2 flex items-center gap-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+            <Star className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+            <span className="text-amber-800 dark:text-amber-300 text-xs">
+              <strong>Risk Owner L1 (Penanggung Jawab Update):</strong>{" "}
+              {(risk as any).assignedOwnerId
+                ? (l1Users.find((u: User) => u.id === (risk as any).assignedOwnerId)?.fullName || `User #${(risk as any).assignedOwnerId}`)
+                : <span className="italic text-amber-600">Belum ditetapkan</span>
+              }
+            </span>
+          </div>
+        )}
         <div><span className="text-muted-foreground">Tahun RKAP:</span> <span className="font-medium ml-1">{risk.rkapYear || "-"}</span></div>
         <div><span className="text-muted-foreground">Taxonomy:</span> <span className="font-medium ml-1">{t1?.name} {t2 ? `> ${t2.name}` : ""} {t3 ? `> ${t3.name}` : ""}</span></div>
       </div>
@@ -531,6 +559,11 @@ export default function RisksPage() {
   const { data: t1s = [] } = useQuery<TaxonomyT1[]>({ queryKey: ["/api/taxonomy/t1"] });
   const { data: t2s = [] } = useQuery<TaxonomyT2[]>({ queryKey: ["/api/taxonomy/t2"] });
   const { data: t3s = [] } = useQuery<TaxonomyT3[]>({ queryKey: ["/api/taxonomy/t3"] });
+  const isL2Plus = (user?.line ?? 1) >= 2;
+  const { data: l1Users = [] } = useQuery<User[]>({
+    queryKey: ["/api/users/l1"],
+    enabled: isL2Plus,
+  });
 
   const selectedPeriod = periodFilter !== "all" ? periods.find(p => p.id === parseInt(periodFilter)) : null;
   const isPeriodClosed = selectedPeriod?.status === "closed";
@@ -584,7 +617,7 @@ export default function RisksPage() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{editingRisk ? "Edit Risiko" : "Input Risiko Baru"}</DialogTitle></DialogHeader>
             <RiskForm
-              risk={editingRisk} orgUnits={orgUnits} t1s={t1s} t2s={t2s} t3s={t3s}
+              risk={editingRisk} orgUnits={orgUnits} t1s={t1s} t2s={t2s} t3s={t3s} l1Users={l1Users}
               onSave={(data) => editingRisk ? updateMut.mutate({ id: editingRisk.id, data }) : handleCreateRisk(data)}
               onCancel={() => { setFormOpen(false); setEditingRisk(undefined); }}
               isPending={createMut.isPending || updateMut.isPending}
@@ -704,7 +737,15 @@ export default function RisksPage() {
                       <div className="flex items-center gap-1">
                         <Button size="icon" variant="ghost" onClick={() => setDetailRisk(risk)} data-testid={`button-view-risk-${risk.id}`}><Eye className="h-4 w-4" /></Button>
                         {!isSysadmin && (!isPeriodClosed) && (
-                          (risk.riskType === "top_risk" || !risk.createdBy || risk.createdBy === user?.id || (!isInputer && !isReviewer)) && (
+                          (() => {
+                            const assignedOwnerId = (risk as any).assignedOwnerId;
+                            const isAssignedOwner = assignedOwnerId && assignedOwnerId === user?.id;
+                            const isTopRisk = risk.riskType === "top_risk";
+                            if (isTopRisk) {
+                              return (isL2Plus || isAssignedOwner || !assignedOwnerId);
+                            }
+                            return (!risk.createdBy || risk.createdBy === user?.id || (!isInputer && !isReviewer));
+                          })() && (
                             <Button size="icon" variant="ghost" onClick={() => { setEditingRisk(risk); setFormOpen(true); }} data-testid={`button-edit-risk-${risk.id}`}><Pencil className="h-4 w-4" /></Button>
                           )
                         )}
@@ -724,7 +765,7 @@ export default function RisksPage() {
       <Dialog open={!!detailRisk} onOpenChange={(open) => { if (!open) setDetailRisk(null); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>{detailRisk?.title}</DialogTitle></DialogHeader>
-          {detailRisk && <RiskDetailDialog risk={detailRisk} orgUnits={orgUnits} t1s={t1s} t2s={t2s} t3s={t3s} onStatusChange={() => setDetailRisk(null)} />}
+          {detailRisk && <RiskDetailDialog risk={detailRisk} orgUnits={orgUnits} t1s={t1s} t2s={t2s} t3s={t3s} l1Users={l1Users} onStatusChange={() => setDetailRisk(null)} />}
         </DialogContent>
       </Dialog>
     </div>
