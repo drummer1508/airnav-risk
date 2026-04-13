@@ -14,11 +14,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import type { Risk, OrgUnit, TaxonomyT1, TaxonomyT2, TaxonomyT3, WorkflowLog, Mitigation } from "@shared/schema";
+import type { Risk, OrgUnit, TaxonomyT1, TaxonomyT2, TaxonomyT3, WorkflowLog, Mitigation, ReportingPeriod } from "@shared/schema";
 import { getRiskLevelInfo, getStatusInfo, getMitigationStatusInfo, getStrategyInfo, getAvailableWorkflowActions, IMPACT_CRITERIA_LABELS, IMPACT_DESCRIPTIONS, LIKELIHOOD_DESCRIPTIONS, formatCurrency } from "@/lib/risk-helpers";
 import { useAuth } from "@/lib/auth";
 import { AuditTrailIcon, AuditTrailList } from "@/components/audit-trail";
-import { Plus, Search, AlertTriangle, Pencil, Trash2, Filter, Eye, History, ChevronRight, Send } from "lucide-react";
+import { Plus, Search, AlertTriangle, Pencil, Trash2, Filter, Eye, History, ChevronRight, Send, Lock, Calendar } from "lucide-react";
 
 function RiskForm({ risk, orgUnits, t1s, t2s, t3s, onSave, onCancel, isPending }: {
   risk?: Risk; orgUnits: OrgUnit[]; t1s: TaxonomyT1[]; t2s: TaxonomyT2[]; t3s: TaxonomyT3[];
@@ -470,17 +470,28 @@ function RiskDetailDialog({ risk, orgUnits, t1s, t2s, t3s, onStatusChange }: {
 export default function RisksPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [periodFilter, setPeriodFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [detailRisk, setDetailRisk] = useState<Risk | null>(null);
   const [editingRisk, setEditingRisk] = useState<Risk | undefined>();
   const { toast } = useToast();
   const { canCreateRisk, isSysadmin, user, isReviewer, isInputer } = useAuth();
 
-  const { data: allRisks = [], isLoading } = useQuery<Risk[]>({ queryKey: ["/api/risks"] });
+  const { data: periods = [] } = useQuery<ReportingPeriod[]>({ queryKey: ["/api/periods"] });
+  const { data: openPeriod } = useQuery<ReportingPeriod | null>({ queryKey: ["/api/periods/open"] });
+
+  const risksQueryKey = periodFilter !== "all" ? ["/api/risks", { periodId: periodFilter }] : ["/api/risks"];
+  const { data: allRisks = [], isLoading } = useQuery<Risk[]>({
+    queryKey: risksQueryKey,
+    queryFn: () => fetch(periodFilter !== "all" ? `/api/risks?periodId=${periodFilter}` : "/api/risks", { credentials: "include" }).then(r => r.json()),
+  });
   const { data: orgUnits = [] } = useQuery<OrgUnit[]>({ queryKey: ["/api/org-units"] });
   const { data: t1s = [] } = useQuery<TaxonomyT1[]>({ queryKey: ["/api/taxonomy/t1"] });
   const { data: t2s = [] } = useQuery<TaxonomyT2[]>({ queryKey: ["/api/taxonomy/t2"] });
   const { data: t3s = [] } = useQuery<TaxonomyT3[]>({ queryKey: ["/api/taxonomy/t3"] });
+
+  const selectedPeriod = periodFilter !== "all" ? periods.find(p => p.id === parseInt(periodFilter)) : null;
+  const isPeriodClosed = selectedPeriod?.status === "closed";
 
   const createMut = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/risks", data),
@@ -497,6 +508,11 @@ export default function RisksPage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/risks"] }); queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] }); toast({ title: "Risiko berhasil dihapus" }); },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
+
+  const handleCreateRisk = (data: any) => {
+    const withPeriod = openPeriod ? { ...data, periodId: openPeriod.id } : data;
+    createMut.mutate(withPeriod);
+  };
 
   const filtered = allRisks.filter((r) => {
     const matchSearch = r.title.toLowerCase().includes(search.toLowerCase()) || r.riskCode.toLowerCase().includes(search.toLowerCase()) || (r.riskOwner?.toLowerCase().includes(search.toLowerCase()) ?? false);
@@ -517,7 +533,7 @@ export default function RisksPage() {
           <p className="text-muted-foreground mt-1">Identifikasi, penilaian, dan pengelolaan risiko enterprise</p>
         </div>
         <Dialog open={formOpen} onOpenChange={(open) => { setFormOpen(open); if (!open) setEditingRisk(undefined); }}>
-          {canCreateRisk && (
+          {canCreateRisk && !isPeriodClosed && (
             <DialogTrigger asChild>
               <Button data-testid="button-add-risk"><Plus className="h-4 w-4 mr-2" />Tambah Risiko</Button>
             </DialogTrigger>
@@ -526,7 +542,7 @@ export default function RisksPage() {
             <DialogHeader><DialogTitle>{editingRisk ? "Edit Risiko" : "Input Risiko Baru"}</DialogTitle></DialogHeader>
             <RiskForm
               risk={editingRisk} orgUnits={orgUnits} t1s={t1s} t2s={t2s} t3s={t3s}
-              onSave={(data) => editingRisk ? updateMut.mutate({ id: editingRisk.id, data }) : createMut.mutate(data)}
+              onSave={(data) => editingRisk ? updateMut.mutate({ id: editingRisk.id, data }) : handleCreateRisk(data)}
               onCancel={() => { setFormOpen(false); setEditingRisk(undefined); }}
               isPending={createMut.isPending || updateMut.isPending}
             />
@@ -534,11 +550,36 @@ export default function RisksPage() {
         </Dialog>
       </div>
 
+      {isPeriodClosed && (
+        <div className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-400 rounded-md px-3 py-2">
+          <Lock className="w-3.5 h-3.5 shrink-0" />
+          <span>Periode <strong>{selectedPeriod?.label}</strong> sudah ditutup. Data bersifat <strong>read-only</strong> dan tidak dapat diubah.</span>
+        </div>
+      )}
+
+      {openPeriod && periodFilter === "all" && (
+        <div className="flex items-center gap-2 text-sm bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-400 rounded-md px-3 py-2">
+          <Calendar className="w-3.5 h-3.5 shrink-0" />
+          <span>Periode aktif: <strong>{openPeriod.label}</strong>. Risiko baru akan otomatis dimasukkan ke periode ini.</span>
+        </div>
+      )}
+
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Cari risiko..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-search-risks" />
         </div>
+        <Select value={periodFilter} onValueChange={setPeriodFilter}>
+          <SelectTrigger className="w-[150px]" data-testid="select-period-filter">
+            <Calendar className="h-4 w-4 mr-1.5 shrink-0" /><SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Periode</SelectItem>
+            {periods.map(p => (
+              <SelectItem key={p.id} value={p.id.toString()}>{p.label}{p.status === "open" ? " ★" : ""}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px]" data-testid="select-status-filter">
             <Filter className="h-4 w-4 mr-2" /><SelectValue />

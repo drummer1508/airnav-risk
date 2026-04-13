@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertTriangle,
   ShieldCheck,
@@ -14,9 +16,11 @@ import {
   CheckCircle,
   Clock,
   TrendingUp,
+  Calendar,
+  BarChart3,
 } from "lucide-react";
 import { getRiskLevelInfo, getStatusInfo, getHeatMapColor } from "@/lib/risk-helpers";
-import type { OrgUnit } from "@shared/schema";
+import type { OrgUnit, ReportingPeriod } from "@shared/schema";
 
 interface DashboardStats {
   totalRisks: number;
@@ -136,8 +140,90 @@ function RiskLevelRow({ level, count, icon: Icon, className }: { level: string; 
   );
 }
 
+interface TimeSeriesEntry {
+  periodId: number;
+  label: string;
+  year: number;
+  quarter: number;
+  status: string;
+  totalRisks: number;
+  criticalRisks: number;
+  highRisks: number;
+  mediumRisks: number;
+  lowRisks: number;
+  validatedRisks: number;
+  draftRisks: number;
+}
+
+function TimeSeriesChart({ data }: { data: TimeSeriesEntry[] }) {
+  if (data.length === 0) {
+    return (
+      <div className="py-8 text-center text-muted-foreground text-sm">
+        <BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+        Belum ada data periode untuk ditampilkan
+      </div>
+    );
+  }
+  const maxTotal = Math.max(...data.map(d => d.totalRisks), 1);
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-4 flex-wrap text-xs">
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-500 inline-block" />Sangat Tinggi</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" />Tinggi</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-400 inline-block" />Sedang</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-emerald-400 inline-block" />Rendah</span>
+      </div>
+      <div className="flex items-end gap-3 h-40 overflow-x-auto pb-2">
+        {data.map(entry => (
+          <div key={entry.periodId} className="flex flex-col items-center gap-1 min-w-[60px]">
+            <div className="w-full flex flex-col-reverse gap-0.5" style={{ height: "120px" }}>
+              {entry.totalRisks === 0 ? (
+                <div className="w-full bg-muted/40 rounded" style={{ height: "8px" }} />
+              ) : (
+                <>
+                  {entry.lowRisks > 0 && (
+                    <div className="w-full bg-emerald-400 rounded-b" style={{ height: `${(entry.lowRisks / maxTotal) * 120}px` }} title={`Rendah: ${entry.lowRisks}`} />
+                  )}
+                  {entry.mediumRisks > 0 && (
+                    <div className="w-full bg-amber-400" style={{ height: `${(entry.mediumRisks / maxTotal) * 120}px` }} title={`Sedang: ${entry.mediumRisks}`} />
+                  )}
+                  {entry.highRisks > 0 && (
+                    <div className="w-full bg-orange-400" style={{ height: `${(entry.highRisks / maxTotal) * 120}px` }} title={`Tinggi: ${entry.highRisks}`} />
+                  )}
+                  {entry.criticalRisks > 0 && (
+                    <div className="w-full bg-red-500 rounded-t" style={{ height: `${(entry.criticalRisks / maxTotal) * 120}px` }} title={`Sangat Tinggi: ${entry.criticalRisks}`} />
+                  )}
+                </>
+              )}
+            </div>
+            <div className="text-[10px] text-muted-foreground text-center font-medium">{entry.label}</div>
+            <div className="text-[10px] text-center font-bold">{entry.totalRisks}</div>
+            <Badge variant="outline" className={`text-[9px] px-1 py-0 ${entry.status === "open" ? "border-emerald-400 text-emerald-600" : "opacity-60"}`}>
+              {entry.status === "open" ? "Aktif" : "Tutup"}
+            </Badge>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const { data: stats, isLoading } = useQuery<DashboardStats>({ queryKey: ["/api/dashboard/stats"] });
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>("all");
+
+  const { data: periods = [] } = useQuery<ReportingPeriod[]>({ queryKey: ["/api/periods"] });
+  const periodQueryKey = selectedPeriodId !== "all"
+    ? ["/api/dashboard/stats", { periodId: selectedPeriodId }]
+    : ["/api/dashboard/stats"];
+  const periodStatsUrl = selectedPeriodId !== "all"
+    ? `/api/dashboard/stats?periodId=${selectedPeriodId}`
+    : "/api/dashboard/stats";
+
+  const { data: stats, isLoading } = useQuery<DashboardStats>({
+    queryKey: periodQueryKey,
+    queryFn: () => fetch(periodStatsUrl, { credentials: "include" }).then(r => r.json()),
+  });
+  const { data: timeSeries = [] } = useQuery<TimeSeriesEntry[]>({ queryKey: ["/api/dashboard/timeseries"] });
   const { data: orgUnitsList = [] } = useQuery<OrgUnit[]>({ queryKey: ["/api/org-units"] });
 
   const getOrgName = (id: number | null) => {
@@ -145,6 +231,8 @@ export default function Dashboard() {
     const unit = orgUnitsList.find(u => u.id === id);
     return unit ? unit.name.replace("Direktorat ", "").replace("Cabang ", "") : "-";
   };
+
+  const openPeriod = periods.find(p => p.status === "open");
 
   if (isLoading || !stats) {
     return (
@@ -160,12 +248,47 @@ export default function Dashboard() {
     );
   }
 
+  const selectedPeriod = selectedPeriodId !== "all" ? periods.find(p => p.id === parseInt(selectedPeriodId)) : null;
+
   return (
     <div className="p-6 space-y-6 overflow-auto h-full">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Executive Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Ringkasan Enterprise Risk Management AirNav Indonesia</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Executive Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Ringkasan Enterprise Risk Management AirNav Indonesia</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+          <Select value={selectedPeriodId} onValueChange={setSelectedPeriodId}>
+            <SelectTrigger className="w-44" data-testid="select-dashboard-period">
+              <SelectValue placeholder="Semua Periode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Periode</SelectItem>
+              {periods.map(p => (
+                <SelectItem key={p.id} value={p.id.toString()}>
+                  {p.label}{p.status === "open" ? " ★" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+      {selectedPeriod && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
+          <Calendar className="w-3.5 h-3.5" />
+          <span>Menampilkan data: <strong className="text-foreground">{selectedPeriod.label}</strong> ({selectedPeriod.startDate} – {selectedPeriod.endDate})</span>
+          <Badge variant="outline" className={selectedPeriod.status === "open" ? "border-emerald-400 text-emerald-600 ml-1" : "ml-1"}>
+            {selectedPeriod.status === "open" ? "Aktif" : "Ditutup"}
+          </Badge>
+        </div>
+      )}
+      {!openPeriod && selectedPeriodId === "all" && periods.length > 0 && (
+        <div className="flex items-center gap-2 text-sm bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-400 rounded-md px-3 py-2">
+          <Calendar className="w-3.5 h-3.5 shrink-0" />
+          <span>Tidak ada periode pelaporan aktif. Data yang ditampilkan adalah gabungan semua periode.</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Total Risiko" value={stats.totalRisks} icon={AlertTriangle} description={`${stats.criticalRisks} sangat tinggi, ${stats.highRisks} tinggi`} iconColor="text-primary" />
@@ -349,6 +472,20 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {timeSeries.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              Tren Risiko per Periode (Time Series)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TimeSeriesChart data={timeSeries} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

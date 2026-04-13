@@ -18,6 +18,7 @@ import OrgUnitsPage from "@/pages/org-units";
 import TaxonomyPage from "@/pages/taxonomy";
 import UsersPage from "@/pages/users";
 import LoginPage from "@/pages/login";
+import PeriodsPage from "@/pages/periods";
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -29,12 +30,14 @@ function ThemeToggle() {
 }
 
 function Router() {
-  const { isSysadmin } = useAuth();
+  const { isSysadmin, user } = useAuth();
+  const canManagePeriods = user && user.line >= 2 && (user.role === "reviewer" || user.role === "approval" || user.role === "sysadmin");
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/risks" component={RisksPage} />
       <Route path="/mitigations" component={MitigationsPage} />
+      <Route path="/periods" component={canManagePeriods ? PeriodsPage : NotFound} />
       <Route path="/org-units" component={isSysadmin ? OrgUnitsPage : NotFound} />
       <Route path="/taxonomy" component={isSysadmin ? TaxonomyPage : NotFound} />
       <Route path="/users" component={isSysadmin ? UsersPage : NotFound} />

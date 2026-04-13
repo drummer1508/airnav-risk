@@ -1,8 +1,8 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, risks, orgUnits, taxonomyT1, taxonomyT2, taxonomyT3,
-  mitigations, workflowLogs, auditTrails,
+  mitigations, workflowLogs, auditTrails, reportingPeriods,
   type User, type InsertUser,
   type Risk, type InsertRisk,
   type OrgUnit, type InsertOrgUnit,
@@ -10,6 +10,7 @@ import {
   type Mitigation, type InsertMitigation,
   type WorkflowLog, type InsertWorkflowLog,
   type AuditTrail, type InsertAuditTrail,
+  type ReportingPeriod, type InsertReportingPeriod,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -39,13 +40,21 @@ export interface IStorage {
   getTaxonomyT2(t1Id?: number): Promise<TaxonomyT2[]>;
   getTaxonomyT3(t2Id?: number): Promise<TaxonomyT3[]>;
 
-  getRisks(): Promise<Risk[]>;
+  getReportingPeriods(): Promise<ReportingPeriod[]>;
+  getReportingPeriod(id: number): Promise<ReportingPeriod | undefined>;
+  getOpenPeriod(): Promise<ReportingPeriod | undefined>;
+  createReportingPeriod(p: InsertReportingPeriod): Promise<ReportingPeriod>;
+  updateReportingPeriod(id: number, p: Partial<InsertReportingPeriod>): Promise<ReportingPeriod | undefined>;
+  deleteReportingPeriod(id: number): Promise<boolean>;
+  carryForwardRisks(sourcePeriodId: number, targetPeriodId: number): Promise<number>;
+
+  getRisks(periodId?: number | null): Promise<Risk[]>;
   getRisk(id: number): Promise<Risk | undefined>;
   createRisk(risk: InsertRisk): Promise<Risk>;
   updateRisk(id: number, risk: Partial<InsertRisk>): Promise<Risk | undefined>;
   deleteRisk(id: number): Promise<boolean>;
 
-  getMitigations(): Promise<Mitigation[]>;
+  getMitigations(periodId?: number | null): Promise<Mitigation[]>;
   getMitigationsByRiskId(riskId: number): Promise<Mitigation[]>;
   createMitigation(mit: InsertMitigation): Promise<Mitigation>;
   updateMitigation(id: number, mit: Partial<InsertMitigation>): Promise<Mitigation | undefined>;
@@ -152,7 +161,64 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(taxonomyT3);
   }
 
-  async getRisks(): Promise<Risk[]> {
+  async getReportingPeriods(): Promise<ReportingPeriod[]> {
+    return db.select().from(reportingPeriods).orderBy(desc(reportingPeriods.year), desc(reportingPeriods.quarter));
+  }
+  async getReportingPeriod(id: number): Promise<ReportingPeriod | undefined> {
+    const [p] = await db.select().from(reportingPeriods).where(eq(reportingPeriods.id, id));
+    return p;
+  }
+  async getOpenPeriod(): Promise<ReportingPeriod | undefined> {
+    const [p] = await db.select().from(reportingPeriods).where(eq(reportingPeriods.status, "open"));
+    return p;
+  }
+  async createReportingPeriod(p: InsertReportingPeriod): Promise<ReportingPeriod> {
+    const [result] = await db.insert(reportingPeriods).values(p).returning();
+    return result;
+  }
+  async updateReportingPeriod(id: number, p: Partial<InsertReportingPeriod>): Promise<ReportingPeriod | undefined> {
+    const [result] = await db.update(reportingPeriods).set(p).where(eq(reportingPeriods.id, id)).returning();
+    return result;
+  }
+  async deleteReportingPeriod(id: number): Promise<boolean> {
+    const result = await db.delete(reportingPeriods).where(eq(reportingPeriods.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+  async carryForwardRisks(sourcePeriodId: number, targetPeriodId: number): Promise<number> {
+    const sourceRisks = await db.select().from(risks).where(eq(risks.periodId, sourcePeriodId));
+    if (sourceRisks.length === 0) return 0;
+    let count = 0;
+    for (const r of sourceRisks) {
+      const { id, createdAt, updatedAt, ...rest } = r as any;
+      const newRisk = await db.insert(risks).values({
+        ...rest,
+        periodId: targetPeriodId,
+        parentRiskId: id,
+        currentStatus: "draft",
+      }).returning();
+      if (newRisk[0]) {
+        const sourceMits = await db.select().from(mitigations).where(eq(mitigations.riskId, id));
+        for (const m of sourceMits) {
+          const { id: mid, createdAt: mca, ...mrest } = m as any;
+          await db.insert(mitigations).values({
+            ...mrest,
+            riskId: newRisk[0].id,
+            periodId: targetPeriodId,
+            workflowStatus: "draft",
+            progress: 0,
+            status: "planned",
+          });
+        }
+        count++;
+      }
+    }
+    return count;
+  }
+
+  async getRisks(periodId?: number | null): Promise<Risk[]> {
+    if (periodId !== undefined && periodId !== null) {
+      return db.select().from(risks).where(eq(risks.periodId, periodId));
+    }
     return db.select().from(risks);
   }
   async getRisk(id: number): Promise<Risk | undefined> {
@@ -204,7 +270,10 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount ?? 0) > 0;
   }
 
-  async getMitigations(): Promise<Mitigation[]> {
+  async getMitigations(periodId?: number | null): Promise<Mitigation[]> {
+    if (periodId !== undefined && periodId !== null) {
+      return db.select().from(mitigations).where(eq(mitigations.periodId, periodId));
+    }
     return db.select().from(mitigations);
   }
   async getMitigationsByRiskId(riskId: number): Promise<Mitigation[]> {

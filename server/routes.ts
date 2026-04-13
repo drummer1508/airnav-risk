@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertRiskSchema, insertMitigationSchema, insertOrgUnitSchema, insertWorkflowLogSchema, insertUserSchema, insertAuditTrailSchema } from "@shared/schema";
+import { insertRiskSchema, insertMitigationSchema, insertOrgUnitSchema, insertWorkflowLogSchema, insertUserSchema, insertAuditTrailSchema, insertReportingPeriodSchema } from "@shared/schema";
 import { setupSession, hashPassword, verifyPassword, requireAuth, requireRole } from "./auth";
 
 type OrgUnitRow = { id: number; parentId: number | null; type: string; level: string; name: string };
@@ -272,8 +272,126 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  // ── Reporting Periods (L2+ manages) ──────────────────────────────────
+  app.get("/api/periods", requireAuth, async (_req, res) => {
+    const periods = await storage.getReportingPeriods();
+    res.json(periods);
+  });
+
+  app.get("/api/periods/open", requireAuth, async (_req, res) => {
+    const period = await storage.getOpenPeriod();
+    res.json(period || null);
+  });
+
+  app.get("/api/periods/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const period = await storage.getReportingPeriod(id);
+    if (!period) return res.status(404).json({ message: "Periode tidak ditemukan" });
+    res.json(period);
+  });
+
+  app.post("/api/periods", requireRole("reviewer", "approval"), async (req, res) => {
+    const role = req.session.role!;
+    const line = req.session.line ?? 1;
+    if (line < 2) return res.status(403).json({ message: "Hanya L2 ke atas yang dapat mengelola periode" });
+    const { year, quarter } = req.body;
+    if (!year || !quarter) return res.status(400).json({ message: "Tahun dan kuartal harus diisi" });
+    const q = parseInt(quarter);
+    const y = parseInt(year);
+    if (q < 1 || q > 4) return res.status(400).json({ message: "Kuartal harus 1-4" });
+    const quarterMonths: Record<number, [string, string]> = {
+      1: [`${y}-01-01`, `${y}-03-31`],
+      2: [`${y}-04-01`, `${y}-06-30`],
+      3: [`${y}-07-01`, `${y}-09-30`],
+      4: [`${y}-10-01`, `${y}-12-31`],
+    };
+    const [startDate, endDate] = quarterMonths[q];
+    const label = `Q${q} ${y}`;
+    const existing = await storage.getReportingPeriods();
+    if (existing.some(p => p.year === y && p.quarter === q)) {
+      return res.status(409).json({ message: `Periode ${label} sudah ada` });
+    }
+    const period = await storage.createReportingPeriod({
+      year: y, quarter: q, label, startDate, endDate,
+      status: "closed", notes: req.body.notes || null,
+      openedBy: null, closedBy: null, openedAt: null, closedAt: null,
+    });
+    res.status(201).json(period);
+  });
+
+  app.post("/api/periods/:id/open", requireRole("reviewer", "approval"), async (req, res) => {
+    const line = req.session.line ?? 1;
+    if (line < 2) return res.status(403).json({ message: "Hanya L2 ke atas yang dapat membuka periode" });
+    const id = parseInt(req.params.id);
+    const period = await storage.getReportingPeriod(id);
+    if (!period) return res.status(404).json({ message: "Periode tidak ditemukan" });
+    if (period.status === "open") return res.status(400).json({ message: "Periode sudah dibuka" });
+    const openPeriod = await storage.getOpenPeriod();
+    if (openPeriod) return res.status(400).json({ message: `Sudah ada periode yang terbuka: ${openPeriod.label}. Tutup terlebih dahulu.` });
+    const updated = await storage.updateReportingPeriod(id, {
+      status: "open",
+      openedAt: new Date(),
+      openedBy: req.session.userId!,
+    });
+    res.json(updated);
+  });
+
+  app.post("/api/periods/:id/close", requireRole("reviewer", "approval"), async (req, res) => {
+    const line = req.session.line ?? 1;
+    if (line < 2) return res.status(403).json({ message: "Hanya L2 ke atas yang dapat menutup periode" });
+    const id = parseInt(req.params.id);
+    const period = await storage.getReportingPeriod(id);
+    if (!period) return res.status(404).json({ message: "Periode tidak ditemukan" });
+    if (period.status === "closed") return res.status(400).json({ message: "Periode sudah ditutup" });
+    const updated = await storage.updateReportingPeriod(id, {
+      status: "closed",
+      closedAt: new Date(),
+      closedBy: req.session.userId!,
+    });
+    res.json(updated);
+  });
+
+  app.post("/api/periods/:id/carry-forward", requireRole("reviewer", "approval"), async (req, res) => {
+    const line = req.session.line ?? 1;
+    if (line < 2) return res.status(403).json({ message: "Hanya L2 ke atas yang dapat melakukan carry-forward" });
+    const sourcePeriodId = parseInt(req.params.id);
+    const sourcePeriod = await storage.getReportingPeriod(sourcePeriodId);
+    if (!sourcePeriod) return res.status(404).json({ message: "Periode sumber tidak ditemukan" });
+    if (sourcePeriod.status !== "closed") return res.status(400).json({ message: "Periode sumber harus ditutup terlebih dahulu" });
+    const { targetPeriodId } = req.body;
+    if (!targetPeriodId) return res.status(400).json({ message: "targetPeriodId harus diisi" });
+    const targetPeriod = await storage.getReportingPeriod(parseInt(targetPeriodId));
+    if (!targetPeriod) return res.status(404).json({ message: "Periode target tidak ditemukan" });
+    const count = await storage.carryForwardRisks(sourcePeriodId, parseInt(targetPeriodId));
+    res.json({ success: true, count, message: `${count} risiko berhasil dibawa ke periode ${targetPeriod.label}` });
+  });
+
+  app.patch("/api/periods/:id", requireRole("reviewer", "approval"), async (req, res) => {
+    const line = req.session.line ?? 1;
+    if (line < 2) return res.status(403).json({ message: "Hanya L2 ke atas yang dapat mengelola periode" });
+    const id = parseInt(req.params.id);
+    const { notes } = req.body;
+    const updated = await storage.updateReportingPeriod(id, { notes });
+    if (!updated) return res.status(404).json({ message: "Periode tidak ditemukan" });
+    res.json(updated);
+  });
+
+  app.delete("/api/periods/:id", requireRole("reviewer", "approval"), async (req, res) => {
+    const line = req.session.line ?? 1;
+    if (line < 2) return res.status(403).json({ message: "Hanya L2 ke atas yang dapat menghapus periode" });
+    const id = parseInt(req.params.id);
+    const period = await storage.getReportingPeriod(id);
+    if (!period) return res.status(404).json({ message: "Periode tidak ditemukan" });
+    if (period.status === "open") return res.status(400).json({ message: "Tidak dapat menghapus periode yang sedang dibuka" });
+    const ok = await storage.deleteReportingPeriod(id);
+    if (!ok) return res.status(404).json({ message: "Not found" });
+    res.json({ success: true });
+  });
+
+  // ── Risks ───────────────────────────────────────────────────────────────
   app.get("/api/risks", requireAuth, async (req, res) => {
-    const allRisks = await storage.getRisks();
+    const periodId = req.query.periodId ? parseInt(req.query.periodId as string) : undefined;
+    const allRisks = await storage.getRisks(periodId);
     const visibleOrgIds = await getUserVisibleOrgIds(req);
     if (visibleOrgIds) {
       const filtered = allRisks.filter(r => r.orgUnitId && visibleOrgIds.includes(r.orgUnitId));
@@ -296,6 +414,12 @@ export async function registerRoutes(
   app.post("/api/risks", requireRole("inputer"), async (req, res) => {
     const parsed = insertRiskSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    if (parsed.data.periodId) {
+      const period = await storage.getReportingPeriod(parsed.data.periodId);
+      if (period && period.status === "closed") {
+        return res.status(403).json({ message: `Periode ${period.label} sudah ditutup dan tidak dapat diubah` });
+      }
+    }
     const visibleOrgIds = await getUserVisibleOrgIds(req);
     if (visibleOrgIds && parsed.data.orgUnitId && !visibleOrgIds.includes(parsed.data.orgUnitId)) {
       return res.status(403).json({ message: "Anda tidak dapat membuat risiko untuk organisasi di luar cakupan Anda" });
@@ -311,6 +435,12 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const existing = await storage.getRisk(id);
     if (!existing) return res.status(404).json({ message: "Not found" });
+    if (existing.periodId && !parsed.data.currentStatus) {
+      const period = await storage.getReportingPeriod(existing.periodId);
+      if (period && period.status === "closed") {
+        return res.status(403).json({ message: `Periode ${period.label} sudah ditutup dan tidak dapat diubah` });
+      }
+    }
     const role = req.session.role!;
     const visibleOrgIds = await getUserVisibleOrgIds(req);
     if (visibleOrgIds && existing.orgUnitId && !visibleOrgIds.includes(existing.orgUnitId)) {
@@ -351,7 +481,8 @@ export async function registerRoutes(
   });
 
   app.get("/api/mitigations", requireAuth, async (req, res) => {
-    const mits = await storage.getMitigations();
+    const periodId = req.query.periodId ? parseInt(req.query.periodId as string) : undefined;
+    const mits = await storage.getMitigations(periodId);
     const visibleOrgIds = await getUserVisibleOrgIds(req);
     if (visibleOrgIds) {
       const allRisks = await storage.getRisks();
@@ -371,6 +502,12 @@ export async function registerRoutes(
   app.post("/api/mitigations", requireRole("inputer"), async (req, res) => {
     const parsed = insertMitigationSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    if (parsed.data.periodId) {
+      const period = await storage.getReportingPeriod(parsed.data.periodId);
+      if (period && period.status === "closed") {
+        return res.status(403).json({ message: `Periode ${period.label} sudah ditutup dan tidak dapat diubah` });
+      }
+    }
     const visibleOrgIds = await getUserVisibleOrgIds(req);
     if (visibleOrgIds) {
       const risk = await storage.getRisk(parsed.data.riskId);
@@ -488,9 +625,36 @@ export async function registerRoutes(
     res.json(trails);
   });
 
+  app.get("/api/dashboard/timeseries", requireAuth, async (req, res) => {
+    const allPeriods = await storage.getReportingPeriods();
+    const visibleOrgIds = await getUserVisibleOrgIds(req);
+    const series = await Promise.all(allPeriods.map(async (period) => {
+      let risks = await storage.getRisks(period.id);
+      if (visibleOrgIds) {
+        risks = risks.filter(r => r.orgUnitId && visibleOrgIds.includes(r.orgUnitId));
+      }
+      return {
+        periodId: period.id,
+        label: period.label,
+        year: period.year,
+        quarter: period.quarter,
+        status: period.status,
+        totalRisks: risks.length,
+        criticalRisks: risks.filter(r => r.inherentRiskScore >= 16).length,
+        highRisks: risks.filter(r => r.inherentRiskScore >= 9 && r.inherentRiskScore < 16).length,
+        mediumRisks: risks.filter(r => r.inherentRiskScore >= 4 && r.inherentRiskScore < 9).length,
+        lowRisks: risks.filter(r => r.inherentRiskScore < 4).length,
+        validatedRisks: risks.filter(r => r.currentStatus === "validated").length,
+        draftRisks: risks.filter(r => r.currentStatus === "draft" || r.currentStatus === "returned_to_inputer").length,
+      };
+    }));
+    res.json(series.reverse());
+  });
+
   app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
-    let allRisks = await storage.getRisks();
-    let allMitigations = await storage.getMitigations();
+    const periodId = req.query.periodId ? parseInt(req.query.periodId as string) : undefined;
+    let allRisks = await storage.getRisks(periodId);
+    let allMitigations = await storage.getMitigations(periodId);
     const visibleOrgIds = await getUserVisibleOrgIds(req);
     if (visibleOrgIds) {
       allRisks = allRisks.filter(r => r.orgUnitId && visibleOrgIds.includes(r.orgUnitId));

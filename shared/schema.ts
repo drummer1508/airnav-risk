@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, serial, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, serial, numeric, boolean, date, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -39,9 +39,27 @@ export const taxonomyT3 = pgTable("taxonomy_t3", {
   name: text("name").notNull(),
 });
 
+export const reportingPeriods = pgTable("reporting_periods", {
+  id: serial("id").primaryKey(),
+  year: integer("year").notNull(),
+  quarter: integer("quarter").notNull(),
+  label: text("label").notNull(),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  status: text("status").notNull().default("closed"),
+  openedAt: timestamp("opened_at"),
+  closedAt: timestamp("closed_at"),
+  openedBy: integer("opened_by"),
+  closedBy: integer("closed_by"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const risks = pgTable("risks", {
   id: serial("id").primaryKey(),
-  riskCode: text("risk_code").notNull().unique(),
+  periodId: integer("period_id"),
+  parentRiskId: integer("parent_risk_id"),
+  riskCode: text("risk_code").notNull(),
   title: text("title").notNull(),
   description: text("description"),
   rootCause: text("root_cause"),
@@ -79,6 +97,7 @@ export const risks = pgTable("risks", {
 export const mitigations = pgTable("mitigations", {
   id: serial("id").primaryKey(),
   riskId: integer("risk_id").notNull(),
+  periodId: integer("period_id"),
   strategy: text("strategy").notNull().default("reduce"),
   actionDescription: text("action_description").notNull(),
   picName: text("pic_name"),
@@ -121,6 +140,7 @@ export const insertOrgUnitSchema = createInsertSchema(orgUnits).omit({ id: true 
 export const insertTaxonomyT1Schema = createInsertSchema(taxonomyT1).omit({ id: true });
 export const insertTaxonomyT2Schema = createInsertSchema(taxonomyT2).omit({ id: true });
 export const insertTaxonomyT3Schema = createInsertSchema(taxonomyT3).omit({ id: true });
+export const insertReportingPeriodSchema = createInsertSchema(reportingPeriods).omit({ id: true, createdAt: true });
 export const insertRiskSchema = createInsertSchema(risks).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertMitigationSchema = createInsertSchema(mitigations).omit({ id: true, createdAt: true });
 export const insertWorkflowLogSchema = createInsertSchema(workflowLogs).omit({ id: true, timestamp: true, fromStatus: true, actorName: true, actorRole: true });
@@ -133,6 +153,8 @@ export type InsertOrgUnit = z.infer<typeof insertOrgUnitSchema>;
 export type TaxonomyT1 = typeof taxonomyT1.$inferSelect;
 export type TaxonomyT2 = typeof taxonomyT2.$inferSelect;
 export type TaxonomyT3 = typeof taxonomyT3.$inferSelect;
+export type ReportingPeriod = typeof reportingPeriods.$inferSelect;
+export type InsertReportingPeriod = z.infer<typeof insertReportingPeriodSchema>;
 export type Risk = typeof risks.$inferSelect;
 export type InsertRisk = z.infer<typeof insertRiskSchema>;
 export type Mitigation = typeof mitigations.$inferSelect;

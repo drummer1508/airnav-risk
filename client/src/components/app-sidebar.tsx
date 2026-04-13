@@ -7,6 +7,7 @@ import {
   Building2,
   Users,
   LogOut,
+  Calendar,
 } from "lucide-react";
 import logoImg from "@assets/logo-rnavrisk_1773195318168.png";
 import { useLocation, Link } from "wouter";
@@ -48,6 +49,7 @@ const ROLE_LABELS: Record<string, string> = {
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout, isSysadmin } = useAuth();
+  const canManagePeriods = user && user.line >= 2 && (user.role === "reviewer" || user.role === "approval");
 
   const isActive = (url: string) =>
     url === "/" ? location === "/" : location.startsWith(url);
@@ -90,6 +92,24 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {canManagePeriods && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Periode Pelaporan</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild data-active={isActive("/periods")} className="data-[active=true]:bg-sidebar-accent">
+                    <Link href="/periods" data-testid="nav-periods">
+                      <Calendar className="h-4 w-4" />
+                      <span>Kelola Periode</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {isSysadmin && (
           <SidebarGroup>
